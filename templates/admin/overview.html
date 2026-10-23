@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Admin console · {{ app_name }}{% endblock %}
+{% block content %}
+{% with active = 'overview' %}{% include "admin/_tabs.html" %}{% endwith %}
+
+<section class="tiles">
+  <div class="tile"><span class="tile-value">{{ account_count }}</span><span class="tile-label">Active client accounts</span></div>
+  <div class="tile"><span class="tile-value">{{ by_role.get('kt_lead', 0) }}</span><span class="tile-label">KT leads</span></div>
+  <div class="tile"><span class="tile-value">{{ by_role.get('sme', 0) }}</span><span class="tile-label">SMEs</span></div>
+  <div class="tile"><span class="tile-value">{{ by_role.get('member', 0) }}</span><span class="tile-label">Team members</span></div>
+  <div class="tile {% if by_mail.get('PENDING') %}tile-alert{% endif %}"><span class="tile-value">{{ by_mail.get('PENDING', 0) }}</span><span class="tile-label">Emails pending</span></div>
+</section>
+<p class="muted">Admins: {{ by_role.get('admin', 0) }} · Viewers: {{ by_role.get('viewer', 0) }} · Deactivated users: {{ inactive }}</p>
+
+{% if accounts_without_lead %}
+<p class="flash flash-error">No active KT lead in: {% for a in accounts_without_lead %}<a href="{{ url_for('admin.edit_account', account_id=a.id) }}">{{ a.code }}</a>{{ ", " if not loop.last }}{% endfor %}.</p>
+{% endif %}
+{% if by_mail.get('PENDING') %}
+<p class="flash flash-error">{{ by_mail['PENDING'] }} email(s) not sent yet. <a href="{{ url_for('admin.outbox', status='PENDING') }}">Open the outbox</a></p>
+{% endif %}
+
+<section class="card">
+  <h2>Recent admin activity</h2>
+  {% if events %}
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>When</th><th>By</th><th>Action</th><th>Target</th><th>Details</th></tr></thead>
+    <tbody>
+      {% for e in events %}
+      <tr>
+        <td>{{ e.created_at | ist }}</td>
+        <td>{{ e.actor.full_name }}</td>
+        <td>{{ e.action.replace('_', ' ').title() }}</td>
+        <td>{{ e.target }}</td>
+        <td class="description">{{ e.detail or "" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <p class="muted">No admin activity yet.</p>
+  {% endif %}
+</section>
+{% endblock %}

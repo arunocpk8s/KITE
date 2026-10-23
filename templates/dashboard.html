@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}My accounts · {{ app_name }}{% endblock %}
+{% block content %}
+{% if my_topics or upcoming %}
+<section class="card">
+  <h2>My KT</h2>
+  {% if upcoming %}
+  <p class="muted">Next sessions</p>
+  <ul class="plain-list">
+    {% for s in upcoming %}
+    <li><strong>{{ s.starts_at | ist }}</strong> ·
+      <a href="{{ url_for('kt.topic', code=s.topic.account.code, topic_id=s.topic.id) }}">{{ s.topic.title }}</a>
+      <span class="muted">({{ s.topic.account.code }})</span>
+      {% if s.meeting_link %} · <a href="{{ s.meeting_link }}" target="_blank" rel="noopener noreferrer">Join</a>{% endif %}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  {% if my_topics %}
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Topic</th><th>Account</th><th>My part</th><th>Status</th><th>Target sign-off</th></tr></thead>
+    <tbody>
+      {% for t in my_topics %}
+      <tr>
+        <td><a href="{{ url_for('kt.topic', code=t.account.code, topic_id=t.id) }}">{{ t.title }}</a></td>
+        <td>{{ t.account.code }}</td>
+        <td>{{ "SME" if t.sme_id == g.user.id else "Receiver" }}</td>
+        <td><span class="kt-status kt-{{ t.status }}">{{ t.status_label }}</span></td>
+        <td>{{ t.due_date | date or "—" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
+</section>
+{% endif %}
+
+<h1>My accounts</h1>
+{% if accounts %}
+<section class="account-grid">
+  {% for a, stats in accounts %}
+  <a class="account-card" href="{{ url_for('main.account_detail', code=a.code) }}">
+    <span class="account-code">{{ a.code }}</span>
+    <span class="account-name">{{ a.name }}</span>
+    {% if a.description %}<span class="muted account-desc">{{ a.description | truncate(140) }}</span>{% endif %}
+    {% if stats.total %}
+    <span class="progress" title="{{ stats.progress }}% of KT topics signed off"><span style="width: {{ stats.progress }}%"></span></span>
+    <span class="muted">KT {{ stats.signed_off }}/{{ stats.total }} signed off{% if stats.overdue %} · <span class="overdue">{{ stats.overdue }} overdue</span>{% endif %}</span>
+    {% else %}
+    <span class="muted">No KT topics yet · {{ a.members | length }} member{{ "" if a.members | length == 1 else "s" }}</span>
+    {% endif %}
+  </a>
+  {% endfor %}
+</section>
+{% else %}
+<section class="card">
+  <p>You are not a member of any client account yet.</p>
+  {% if g.user.is_admin %}
+  <p><a class="button" href="{{ url_for('admin.new_account') }}">Create a client account</a></p>
+  {% else %}
+  <p class="muted">Ask your KT lead or the KITE admin to add you to your account.</p>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}

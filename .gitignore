@@ -1,0 +1,15 @@
+.env
+instance/
+__pycache__/
+*.db
+*.pyc
+.venv/
+.pytest_cache/
+
+# Kept local only (company-restricted material and machine-specific files)
+docs/
+static/logo*
+backup/
+logs/
+*.log
+.vercel/

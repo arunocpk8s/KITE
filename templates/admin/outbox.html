@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Email outbox · {{ app_name }}{% endblock %}
+{% block content %}
+{% with active = 'outbox' %}{% include "admin/_tabs.html" %}{% endwith %}
+
+<form class="filters" method="get" action="{{ url_for('admin.outbox') }}">
+  <label>Status
+    <select name="status">
+      <option value="">All</option>
+      {% for s in statuses %}<option value="{{ s }}" {% if status == s %}selected{% endif %}>{{ s.title() }} ({{ counts.get(s, 0) }})</option>{% endfor %}
+    </select>
+  </label>
+  <button type="submit">Filter</button>
+  <a href="{{ url_for('admin.outbox') }}">Clear</a>
+</form>
+{% if counts.get('PENDING') %}
+<form class="filters" method="post" action="{{ url_for('admin.resend_all') }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <button type="submit">Resend all {{ counts['PENDING'] }} pending</button>
+</form>
+{% endif %}
+
+{% if emails %}
+<div class="table-wrap">
+<table>
+  <thead>
+    <tr><th>#</th><th>Created</th><th>To</th><th>Subject</th><th>Status</th><th>Tries</th><th>Last error</th><th></th></tr>
+  </thead>
+  <tbody>
+    {% for e in emails %}
+    <tr>
+      <td>{{ e.id }}</td>
+      <td>{{ e.created_at | ist }}</td>
+      <td class="wrap">{{ e.recipients.replace(',', ', ') }}</td>
+      <td>{{ e.subject }}</td>
+      <td><span class="mail-status mail-{{ e.status }}">{{ e.status }}</span>{% if e.sent_at %}<br><span class="muted">{{ e.sent_at | ist }}</span>{% endif %}</td>
+      <td>{{ e.attempts }}</td>
+      <td class="wrap muted">{{ e.last_error or "" }}</td>
+      <td class="actions-cell">
+        {% if e.status == 'PENDING' %}
+        <form method="post" action="{{ url_for('admin.retry_email', email_id=e.id, status=status) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="small">Retry</button>
+        </form>
+        <form method="post" action="{{ url_for('admin.cancel_email', email_id=e.id, status=status) }}" data-confirm="Cancel email #{{ e.id }}? It will not be sent.">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="small danger">Cancel</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+<p class="hint">Shows the latest 200 emails. Email bodies are not shown here.</p>
+{% else %}
+<p class="muted">No emails.</p>
+{% endif %}
+{% endblock %}

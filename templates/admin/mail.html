@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Mail server · {{ app_name }}{% endblock %}
+{% block content %}
+{% with active = 'mail' %}{% include "admin/_tabs.html" %}{% endwith %}
+
+<section class="card">
+  <h2>Send a test email</h2>
+  <form class="filters" method="post" action="{{ url_for('admin.test_mail') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Send to
+      <input name="to" type="email" value="{{ g.user.email }}" required>
+    </label>
+    <button type="submit">Send test email</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>Mail server</h2>
+  <form method="post" action="{{ url_for('admin.mail_server') }}" novalidate autocomplete="off">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="row">
+      <div>
+        <label for="SMTP_HOST">SMTP host</label>
+        <input id="SMTP_HOST" name="SMTP_HOST" value="{{ smtp.SMTP_HOST }}" placeholder="smtp.gmail.com or the company relay">
+        {% if smtp_errors.SMTP_HOST %}<p class="error">{{ smtp_errors.SMTP_HOST }}</p>{% endif %}
+      </div>
+      <div>
+        <label for="SMTP_PORT">Port</label>
+        <input id="SMTP_PORT" name="SMTP_PORT" value="{{ smtp.SMTP_PORT }}" inputmode="numeric" maxlength="5">
+        {% if smtp_errors.SMTP_PORT %}<p class="error">{{ smtp_errors.SMTP_PORT }}</p>{% endif %}
+      </div>
+    </div>
+    <label class="inline"><input type="checkbox" name="SMTP_USE_TLS" value="1" {% if smtp.SMTP_USE_TLS %}checked{% endif %}> Use STARTTLS (needed for port 587, e.g. Gmail)</label>
+    <div class="row">
+      <div>
+        <label for="SMTP_USER">Login username (leave empty if the relay needs no login)</label>
+        <input id="SMTP_USER" name="SMTP_USER" value="{{ smtp.SMTP_USER }}" maxlength="200" autocomplete="off">
+        {% if smtp_errors.SMTP_USER %}<p class="error">{{ smtp_errors.SMTP_USER }}</p>{% endif %}
+      </div>
+      <div>
+        <label for="SMTP_PASSWORD">Password</label>
+        <input id="SMTP_PASSWORD" name="SMTP_PASSWORD" type="password" autocomplete="new-password"
+               placeholder="{{ 'Leave empty to keep the current password' if smtp.password_status in ('saved', 'env') else 'Not set' }}">
+        <p class="hint">
+          {% if smtp.password_status == 'saved' %}A password is saved (encrypted). It is never shown.
+          {% elif smtp.password_status == 'env' %}Currently using the password from .env, if any.
+          {% elif smtp.password_status == 'unreadable' %}<span class="error">The saved password can no longer be read (SECRET_KEY changed). Enter it again.</span>
+          {% else %}No password.{% endif %}
+        </p>
+        {% if smtp.password_status in ('saved', 'unreadable') %}
+        <label class="inline"><input type="checkbox" name="clear_password" value="1"> Remove the saved password</label>
+        {% endif %}
+        {% if smtp_errors.SMTP_PASSWORD %}<p class="error">{{ smtp_errors.SMTP_PASSWORD }}</p>{% endif %}
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label for="SMTP_FROM">Sender address</label>
+        <input id="SMTP_FROM" name="SMTP_FROM" type="email" value="{{ smtp.SMTP_FROM }}" maxlength="200">
+        <p class="hint">Gmail requires the account's own address.</p>
+        {% if smtp_errors.SMTP_FROM %}<p class="error">{{ smtp_errors.SMTP_FROM }}</p>{% endif %}
+      </div>
+      <div>
+        <label for="APP_BASE_URL">KITE address used in email links</label>
+        <input id="APP_BASE_URL" name="APP_BASE_URL" value="{{ smtp.APP_BASE_URL }}" maxlength="200">
+        {% if smtp_errors.APP_BASE_URL %}<p class="error">{{ smtp_errors.APP_BASE_URL }}</p>{% endif %}
+      </div>
+    </div>
+    <button type="submit">Save mail server</button>
+  </form>
+  <p class="hint">Changes apply immediately, with no restart. Anything not saved here comes from the .env file.
+    {% if smtp_saved %}These settings are currently saved in the console.{% endif %}</p>
+  {% if smtp_saved %}
+  <form method="post" action="{{ url_for('admin.mail_server_reset') }}" data-confirm="Forget the mail server settings saved here and use the .env values?">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="danger">Reset to .env values</button>
+  </form>
+  {% endif %}
+</section>
+{% endblock %}

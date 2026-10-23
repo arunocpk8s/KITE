@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}{{ account.code if account else "Add account" }} · {{ app_name }}{% endblock %}
+{% block content %}
+{% with active = 'accounts' %}{% include "admin/_tabs.html" %}{% endwith %}
+<p><a href="{{ url_for('admin.accounts') }}">&larr; All client accounts</a></p>
+
+<section class="card">
+  <h2>{{ "Client account " ~ account.code if account else "Add a client account" }}
+    {% if account and not account.active %}<span class="badge-breached">Deactivated</span>{% endif %}</h2>
+  <form method="post" action="{{ url_for('admin.edit_account', account_id=account.id) if account else url_for('admin.new_account') }}" novalidate>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="row">
+      <div>
+        <label for="code">Code</label>
+        {% if account %}
+        <input id="code" value="{{ account.code }}" disabled>
+        {% else %}
+        <input id="code" name="code" value="{{ form.code }}" maxlength="20" placeholder="e.g. ACME" required>
+        <p class="hint">Short and permanent; used in links. Capital letters, numbers, dash or underscore.</p>
+        {% if errors.code %}<p class="error">{{ errors.code }}</p>{% endif %}
+        {% endif %}
+      </div>
+      <div>
+        <label for="name">Client account name</label>
+        <input id="name" name="name" value="{{ form.name }}" maxlength="120" required>
+        {% if errors.name %}<p class="error">{{ errors.name }}</p>{% endif %}
+      </div>
+    </div>
+    <label for="description">Description (engagement, services, locations)</label>
+    <textarea id="description" name="description" rows="4" maxlength="2000">{{ form.description }}</textarea>
+    {% if errors.description %}<p class="error">{{ errors.description }}</p>{% endif %}
+    <button type="submit">{{ "Save changes" if account else "Create account" }}</button>
+    <a href="{{ url_for('admin.accounts') }}">Cancel</a>
+  </form>
+</section>
+
+{% if account %}
+<section class="card">
+  <h2>Members ({{ members | length }})</h2>
+  <p class="hint">Members see this account and its KT content. Their role (KT lead, SME, team member, viewer) is set on the user.</p>
+  {% if members %}
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Name</th><th>Username</th><th>Role</th><th>Email</th><th></th></tr></thead>
+    <tbody>
+      {% for u in members %}
+      <tr {% if not u.active %}class="inactive-row"{% endif %}>
+        <td>{{ u.full_name }}</td>
+        <td><a href="{{ url_for('admin.edit_user', user_id=u.id) }}">{{ u.username }}</a></td>
+        <td>{{ u.role_label }}</td>
+        <td>{{ u.email }}</td>
+        <td>
+          <form method="post" action="{{ url_for('admin.remove_account_member', account_id=account.id, user_id=u.id) }}"
+                data-confirm="Remove {{ u.full_name }} from {{ account.code }}?">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="link-button">Remove</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <p class="muted">No members yet.</p>
+  {% endif %}
+  {% if candidates %}
+  <form class="filters" method="post" action="{{ url_for('admin.add_account_member', account_id=account.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Add a person
+      <select name="user_id" required>
+        <option value="">Choose…</option>
+        {% for u in candidates %}<option value="{{ u.id }}">{{ u.full_name }} ({{ u.role_label }})</option>{% endfor %}
+      </select>
+    </label>
+    <button type="submit">Add member</button>
+    <a href="{{ url_for('admin.new_user', account=account.id) }}">Create a new user for this account</a>
+  </form>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2>Account status</h2>
+  <form method="post" action="{{ url_for('admin.set_account_active', account_id=account.id) }}"
+        data-confirm="{{ ('Reactivate ' if not account.active else 'Deactivate ') ~ account.code }}?">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% if account.active %}
+    <p>A deactivated account is hidden from its members. Nothing is deleted.</p>
+    <input type="hidden" name="active" value="0">
+    <button type="submit" class="danger">Deactivate account</button>
+    {% else %}
+    <p>This account is deactivated.</p>
+    <input type="hidden" name="active" value="1">
+    <button type="submit">Reactivate account</button>
+    {% endif %}
+  </form>
+</section>
+{% endif %}
+{% endblock %}

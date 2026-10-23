@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}{{ "Edit module" if module else "Add module" }} · {{ account.code }} · {{ app_name }}{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('kt.plan', code=account.code) }}">&larr; KT plan · {{ account.name }}</a></p>
+
+<section class="card narrow-form">
+  <h2>{{ "Edit module" if module else "Add a module" }}</h2>
+  <form method="post" action="{{ url_for('kt.edit_module', code=account.code, module_id=module.id) if module else url_for('kt.new_module', code=account.code) }}" novalidate>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label for="title">Module title</label>
+    <input id="title" name="title" value="{{ form.title }}" maxlength="200" placeholder="e.g. Billing and invoicing" required autofocus>
+    {% if errors.title %}<p class="error">{{ errors.title }}</p>{% endif %}
+    <label for="description">Description (optional)</label>
+    <textarea id="description" name="description" rows="4" maxlength="4000">{{ form.description }}</textarea>
+    {% if errors.description %}<p class="error">{{ errors.description }}</p>{% endif %}
+    <button type="submit">{{ "Save module" if module else "Add module" }}</button>
+    <a href="{{ url_for('kt.plan', code=account.code) }}">Cancel</a>
+  </form>
+</section>
+
+{% if module %}
+<section class="card narrow-form">
+  <h2>Delete module</h2>
+  {% if module.topics %}
+  <p class="muted">This module has {{ module.topics | length }} topic(s), so it cannot be deleted. Cancel topics you no longer need instead.</p>
+  {% else %}
+  <form method="post" action="{{ url_for('kt.delete_module', code=account.code, module_id=module.id) }}" data-confirm="Delete the empty module '{{ module.title }}'?">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="danger">Delete this empty module</button>
+  </form>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block title %}{{ "Edit " ~ user.username if user else "Add user" }} · {{ app_name }}{% endblock %}
+{% block content %}
+{% with active = 'users' %}{% include "admin/_tabs.html" %}{% endwith %}
+<p><a href="{{ url_for('admin.users') }}">&larr; All users</a></p>
+
+<section class="card">
+  <h2>{{ "Edit " ~ user.username if user else "Add a user" }}
+    {% if user and not user.active %}<span class="badge-breached">Deactivated</span>{% endif %}</h2>
+  <form method="post" action="{{ url_for('admin.edit_user', user_id=user.id) if user else url_for('admin.new_user') }}" novalidate>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="row">
+      <div>
+        <label for="username">Username</label>
+        {% if user %}
+        <input id="username" value="{{ user.username }}" disabled>
+        {% else %}
+        <input id="username" name="username" value="{{ form.username }}" maxlength="40" autocomplete="off" required>
+        {% if errors.username %}<p class="error">{{ errors.username }}</p>{% endif %}
+        {% endif %}
+      </div>
+      <div>
+        <label for="full_name">Full name</label>
+        <input id="full_name" name="full_name" value="{{ form.full_name }}" maxlength="120" required>
+        {% if errors.full_name %}<p class="error">{{ errors.full_name }}</p>{% endif %}
+      </div>
+    </div>
+    <label for="email">Email (receives notifications)</label>
+    <input id="email" name="email" type="email" value="{{ form.email }}" maxlength="200" required>
+    {% if errors.email %}<p class="error">{{ errors.email }}</p>{% endif %}
+    <div class="row">
+      <div>
+        <label for="role">Role</label>
+        <select id="role" name="role">
+          {% for r in roles %}<option value="{{ r }}" {% if form.role == r %}selected{% endif %}>{{ role_labels[r] }}</option>{% endfor %}
+        </select>
+        <p class="hint">KT lead: plans KT and signs off for their accounts. SME: owns and delivers knowledge.
+          Team member: receives KT (newcomers). Viewer: read-only. Admin: everything, including this console.</p>
+        {% if errors.role %}<p class="error">{{ errors.role }}</p>{% endif %}
+      </div>
+      <div>
+        <label for="department">Department</label>
+        <select id="department" name="department">
+          <option value="">—</option>
+          {% for d in departments %}<option value="{{ d }}" {% if form.department == d %}selected{% endif %}>{{ d }}</option>{% endfor %}
+        </select>
+        {% if errors.department %}<p class="error">{{ errors.department }}</p>{% endif %}
+      </div>
+    </div>
+    <fieldset class="checklist">
+      <legend>Client accounts</legend>
+      {% for a in accounts %}
+      <label class="inline"><input type="checkbox" name="accounts" value="{{ a.id }}" {% if a.id in form.account_ids %}checked{% endif %}>
+        {{ a.code }} · {{ a.name }}{% if not a.active %} <span class="muted">(deactivated)</span>{% endif %}</label>
+      {% else %}
+      <p class="muted">No client accounts yet. <a href="{{ url_for('admin.new_account') }}">Add one</a>.</p>
+      {% endfor %}
+      <p class="hint">Admins see every account whether or not they are ticked here.</p>
+      {% if errors.accounts %}<p class="error">{{ errors.accounts }}</p>{% endif %}
+    </fieldset>
+    {% if not user %}
+    {% if sso_enabled %}
+    <p class="hint">They sign in with Microsoft using this email; the account is linked on their first sign-in.
+      Leave the password empty unless they also need a password (for example the break-glass admin).</p>
+    {% endif %}
+    <div class="row">
+      <div>
+        <label for="password">Password (at least 8 characters{{ ", optional" if sso_enabled }})</label>
+        <input id="password" name="password" type="password" autocomplete="new-password" {% if not sso_enabled %}required{% endif %}>
+        {% if errors.password %}<p class="error">{{ errors.password }}</p>{% endif %}
+      </div>
+      <div>
+        <label for="password2">Repeat password</label>
+        <input id="password2" name="password2" type="password" autocomplete="new-password" {% if not sso_enabled %}required{% endif %}>
+      </div>
+    </div>
+    {% else %}
+    <p class="hint">Sign-in: {{ "Microsoft" if user.sso_oid else "Password only" }}{% if user.sso_oid and user.password_hash %} (also has a password){% endif %}.
+      Last sign-in: {{ user.last_login_at | ist if user.last_login_at else "never" }}.</p>
+    {% endif %}
+    <button type="submit">{{ "Save changes" if user else "Create user" }}</button>
+    <a href="{{ url_for('admin.users') }}">Cancel</a>
+  </form>
+</section>
+
+{% if user %}
+<section class="card">
+  <h2>{{ "Set a password" if sso_enabled and not user.password_hash else "Reset password" }}</h2>
+  {% if sso_enabled %}<p class="hint">Not needed for people who sign in with Microsoft.</p>{% endif %}
+  <form method="post" action="{{ url_for('admin.reset_password', user_id=user.id) }}"
+        data-confirm="Set a new password for {{ user.username }}?">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="row">
+      <div>
+        <label for="new-password">New password (at least 8 characters)</label>
+        <input id="new-password" name="password" type="password" autocomplete="new-password" required>
+      </div>
+      <div>
+        <label for="new-password2">Repeat new password</label>
+        <input id="new-password2" name="password2" type="password" autocomplete="new-password" required>
+      </div>
+    </div>
+    <button type="submit">Set new password</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>Account status</h2>
+  <form method="post" action="{{ url_for('admin.set_active', user_id=user.id) }}"
+        data-confirm="{{ ('Reactivate ' if not user.active else 'Deactivate ') ~ user.username }}?">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% if user.active %}
+    <p>Deactivated users are signed out immediately and cannot log in. Their history is kept.</p>
+    <input type="hidden" name="active" value="0">
+    <button type="submit" class="danger">Deactivate account</button>
+    {% else %}
+    <p>This account is deactivated.</p>
+    <input type="hidden" name="active" value="1">
+    <button type="submit">Reactivate account</button>
+    {% endif %}
+  </form>
+</section>
+{% endif %}
+{% endblock %}

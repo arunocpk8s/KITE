@@ -1,0 +1,8 @@
+<h1>Admin console</h1>
+<nav class="tabs">
+  <a href="{{ url_for('admin.overview') }}" {% if active == 'overview' %}class="active"{% endif %}>Overview</a>
+  <a href="{{ url_for('admin.accounts') }}" {% if active == 'accounts' %}class="active"{% endif %}>Client accounts</a>
+  <a href="{{ url_for('admin.users') }}" {% if active == 'users' %}class="active"{% endif %}>Users</a>
+  <a href="{{ url_for('admin.mail') }}" {% if active == 'mail' %}class="active"{% endif %}>Mail server</a>
+  <a href="{{ url_for('admin.outbox') }}" {% if active == 'outbox' %}class="active"{% endif %}>Email outbox</a>
+</nav>

@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Log in · {{ app_name }}{% endblock %}
+{% block content %}
+<section class="card narrow">
+  {% if logo_file %}<img class="login-logo" src="{{ url_for('static', filename=logo_file) }}" alt="Company logo">{% endif %}
+  <h1>Log in to {{ app_name }}</h1>
+  {% if sso_enabled %}
+  <a class="button sso-button" href="{{ url_for('auth.sso_start', next=next) }}">Sign in with Microsoft</a>
+  <p class="hint">Use your company account. You get a KITE account automatically on first sign-in.</p>
+  {% endif %}
+  {% macro password_form() %}
+  <form method="post" action="{{ url_for('auth.login') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="next" value="{{ next }}">
+    <label for="username">Username</label>
+    <input id="username" name="username" value="{{ username }}" autocomplete="username" required {% if not sso_enabled %}autofocus{% endif %}>
+    <label for="password">Password</label>
+    <input id="password" name="password" type="password" autocomplete="current-password" required>
+    <button type="submit">Log in</button>
+  </form>
+  {% endmacro %}
+  {% if not sso_enabled %}
+  {{ password_form() }}
+  {% elif local_login %}
+  <details class="local-login" {% if username %}open{% endif %}>
+    <summary>Log in with a username and password</summary>
+    {{ password_form() }}
+  </details>
+  {% else %}
+  <details class="local-login" {% if username %}open{% endif %}>
+    <summary>Emergency admin login</summary>
+    <p class="hint">Only for the break-glass admin account. Every use is recorded.</p>
+    {{ password_form() }}
+  </details>
+  {% endif %}
+</section>
+{% endblock %}

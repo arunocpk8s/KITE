@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Users · {{ app_name }}{% endblock %}
+{% block content %}
+{% with active = 'users' %}{% include "admin/_tabs.html" %}{% endwith %}
+
+<form class="filters" method="get" action="{{ url_for('admin.users') }}">
+  <label>Search
+    <input name="q" value="{{ filters.q }}" placeholder="Name, username or email">
+  </label>
+  <label>Role
+    <select name="role">
+      <option value="">All</option>
+      {% for r in roles %}<option value="{{ r }}" {% if filters.role == r %}selected{% endif %}>{{ role_labels[r] }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>Account
+    <select name="account">
+      <option value="">All</option>
+      {% for a in accounts %}<option value="{{ a.id }}" {% if filters.account == a.id|string %}selected{% endif %}>{{ a.code }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>Status
+    <select name="status">
+      <option value="">All</option>
+      <option value="active" {% if filters.status == 'active' %}selected{% endif %}>Active</option>
+      <option value="inactive" {% if filters.status == 'inactive' %}selected{% endif %}>Deactivated</option>
+    </select>
+  </label>
+  <button type="submit">Filter</button>
+  <a href="{{ url_for('admin.users') }}">Clear</a>
+  <a class="button push-right" href="{{ url_for('admin.new_user') }}">Add user</a>
+</form>
+
+{% if users %}
+<div class="table-wrap">
+<table>
+  <thead>
+    <tr><th>Username</th><th>Name</th><th>Email</th><th>Role</th><th>Accounts</th><th>Sign-in</th><th>Last sign-in</th><th>Status</th><th></th></tr>
+  </thead>
+  <tbody>
+    {% for u in users %}
+    <tr {% if not u.active %}class="inactive-row"{% endif %}>
+      <td>{{ u.username }}</td>
+      <td>{{ u.full_name }}</td>
+      <td>{{ u.email }}</td>
+      <td>{{ u.role_label }}</td>
+      <td>{% if u.is_admin %}<span class="muted">All</span>{% else %}{{ u.memberships | map(attribute='account.code') | sort | join(', ') or "—" }}{% endif %}</td>
+      <td>{{ "Microsoft" if u.sso_oid else "Password" }}</td>
+      <td>{{ u.last_login_at | ist if u.last_login_at else "—" }}</td>
+      <td>{% if u.active %}Active{% else %}<span class="muted">Deactivated</span>{% endif %}</td>
+      <td><a href="{{ url_for('admin.edit_user', user_id=u.id) }}">Edit</a></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<p class="muted">No users match.</p>
+{% endif %}
+{% endblock %}

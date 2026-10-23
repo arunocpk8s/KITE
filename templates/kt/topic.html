@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% block title %}{{ topic.title }} · {{ account.code }} · {{ app_name }}{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('kt.plan', code=account.code) }}#module-{{ topic.module_id }}">&larr; KT plan · {{ account.name }}</a></p>
+<h1>{{ topic.title }} <span class="kt-status kt-{{ topic.status }}">{{ topic.status_label }}</span>
+  {% if topic.is_overdue(today) %}<span class="badge-breached">Overdue</span>{% endif %}</h1>
+
+<div class="topic-layout">
+<div>
+  <section class="card">
+    <dl class="details">
+      <dt>Module</dt><dd>{{ topic.module.title }}</dd>
+      <dt>SME</dt><dd>{{ topic.sme.full_name if topic.sme else "Not assigned yet" }}</dd>
+      <dt>Receivers</dt><dd>{{ topic.receiver_users | map(attribute='full_name') | join(', ') or "None yet" }}</dd>
+      <dt>Planned</dt><dd>{{ topic.planned_date | date or "—" }}</dd>
+      <dt>Target sign-off</dt><dd>{{ topic.due_date | date or "—" }}</dd>
+      {% if topic.signed_off_at %}<dt>Signed off</dt><dd>{{ topic.signed_off_at | ist }} by {{ topic.signed_off_by.full_name }}</dd>{% endif %}
+    </dl>
+    {% if topic.description %}<h2>What to learn</h2><p class="description">{{ topic.description }}</p>{% endif %}
+    {% if links %}
+    <h2>Materials</h2>
+    <ul class="plain-list">
+      {% for label, url in links %}<li><a href="{{ url }}" target="_blank" rel="noopener noreferrer">{{ label }}</a></li>{% endfor %}
+    </ul>
+    {% endif %}
+    {% if can_run %}<p><a href="{{ url_for('kt.edit_topic', code=account.code, topic_id=topic.id) }}">Edit topic</a></p>{% endif %}
+  </section>
+
+  <section class="card" id="sessions">
+    <h2>Sessions</h2>
+    {% if topic.sessions %}
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th>When</th><th>Length</th><th>Links</th><th>Attended</th><th>Notes</th><th></th></tr></thead>
+      <tbody>
+        {% for s in topic.sessions %}
+        <tr>
+          <td>{{ s.starts_at | ist }}</td>
+          <td>{{ s.duration_minutes }} min</td>
+          <td>
+            {% if s.meeting_link %}<a href="{{ s.meeting_link }}" target="_blank" rel="noopener noreferrer">Meeting</a>{% endif %}
+            {% if s.recording_link %}{{ " · " if s.meeting_link }}<a href="{{ s.recording_link }}" target="_blank" rel="noopener noreferrer">Recording</a>{% endif %}
+          </td>
+          <td>{% if s.held %}{{ s.attendance | map(attribute='user.full_name') | sort | join(', ') or "—" }}{% else %}<span class="muted">Not held yet</span>{% endif %}</td>
+          <td class="description">{{ s.notes }}</td>
+          <td>
+            {% if can_run and not s.held %}
+            <details>
+              <summary>Mark as held</summary>
+              <form method="post" action="{{ url_for('kt.session_held', code=account.code, topic_id=topic.id, session_id=s.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                {% for u in topic.receiver_users %}
+                <label class="inline"><input type="checkbox" name="attended" value="{{ u.id }}" checked> {{ u.full_name }}</label>
+                {% endfor %}
+                <label for="rec-{{ s.id }}">Recording link (optional)</label>
+                <input id="rec-{{ s.id }}" name="recording_link" placeholder="https://...">
+                <button type="submit">Save</button>
+              </form>
+            </details>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+    <p class="muted">No sessions yet.</p>
+    {% endif %}
+    {% if can_run and topic.is_open %}
+    <details class="add-session" {% if not topic.sessions %}open{% endif %}>
+      <summary>Schedule a session</summary>
+      <form method="post" action="{{ url_for('kt.add_session', code=account.code, topic_id=topic.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="row">
+          <div class="row">
+            <div><label for="date">Date</label><input id="date" name="date" type="date" required></div>
+            <div><label for="time">Time (IST)</label><input id="time" name="time" type="time" required></div>
+          </div>
+          <div class="row">
+            <div><label for="duration">Minutes</label><input id="duration" name="duration" type="number" min="15" max="480" step="15" value="60"></div>
+            <div><label for="meeting_link">Meeting link</label><input id="meeting_link" name="meeting_link" placeholder="https://teams.microsoft.com/..."></div>
+          </div>
+        </div>
+        <label for="notes">Notes (agenda)</label>
+        <textarea id="notes" name="notes" rows="2" maxlength="2000"></textarea>
+        <button type="submit">Schedule and email the receivers</button>
+      </form>
+    </details>
+    {% endif %}
+  </section>
+
+  <section class="card" id="understanding">
+    <h2>Understanding</h2>
+    {% if topic.ratings %}
+    <p>Average {{ topic.average_rating }}/5 from {{ topic.ratings | length }} receiver(s).</p>
+    <ul class="plain-list">
+      {% for r in topic.ratings | sort(attribute='user.full_name') %}
+      <li {% if r.score <= low_rating %}class="overdue"{% endif %}>{{ r.user.full_name }}: {{ r.score }}/5{% if r.comment %} · <span class="description">{{ r.comment }}</span>{% endif %}</li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="muted">No ratings yet. Receivers rate how well they understood the topic after the session.</p>
+    {% endif %}
+    {% if is_receiver %}
+    <form method="post" action="{{ url_for('kt.rate', code=account.code, topic_id=topic.id) }}" class="rating-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <p><strong>How well did you understand this topic?</strong></p>
+      <div class="rating-scale">
+        {% for n, text in [(1, "Not yet"), (2, "Partly"), (3, "Mostly"), (4, "Well"), (5, "Could teach it")] %}
+        <label class="inline"><input type="radio" name="score" value="{{ n }}" {% if my_rating and my_rating.score == n %}checked{% endif %}> {{ n }} · {{ text }}</label>
+        {% endfor %}
+      </div>
+      <label for="comment">Comment or open questions (optional)</label>
+      <textarea id="comment" name="comment" rows="2" maxlength="2000">{{ my_rating.comment if my_rating else "" }}</textarea>
+      <button type="submit">{{ "Update my rating" if my_rating else "Save my rating" }}</button>
+      <p class="hint">A rating of {{ low_rating }} or less tells the KT lead and the SME that a follow-up session is needed.</p>
+    </form>
+    {% endif %}
+  </section>
+</div>
+
+<div>
+  {% if moves %}
+  <section class="card">
+    <h2>Update status</h2>
+    <form method="post" action="{{ url_for('kt.change_status', code=account.code, topic_id=topic.id) }}" data-confirm="Change the status of this topic?">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label for="status">New status</label>
+      <select id="status" name="status" required>
+        <option value="">Choose…</option>
+        {% for s in moves %}<option value="{{ s }}">{{ labels[s] }}</option>{% endfor %}
+      </select>
+      <label for="status-comment">Comment (required to cancel)</label>
+      <textarea id="status-comment" name="comment" rows="2" maxlength="2000"></textarea>
+      <button type="submit">Update</button>
+    </form>
+    <p class="hint">Scheduling a session moves a planned topic to Scheduled; marking it held moves it to Delivered.
+      {% if not can_manage %}Only the KT lead can sign off or cancel.{% endif %}</p>
+  </section>
+  {% endif %}
+
+  <section class="card">
+    <h2>History</h2>
+    <ul class="history">
+      {% for e in topic.events | reverse %}
+      <li><span class="muted">{{ e.created_at | ist }}</span><br>
+        <strong>{{ e.actor.full_name }}</strong>
+        {% if e.event_type == "STATUS_CHANGED" %}moved it from {{ labels.get(e.old_value, e.old_value) }} to {{ labels.get(e.new_value, e.new_value) }}
+        {% elif e.event_type == "CREATED" %}added the topic
+        {% elif e.event_type == "SESSION_SCHEDULED" %}scheduled a session for {{ e.new_value }}
+        {% elif e.event_type == "SESSION_HELD" %}recorded the session of {{ e.new_value }} as held
+        {% elif e.event_type == "RATED" %}rated their understanding {{ e.new_value }}/5
+        {% else %}updated the topic{% endif %}
+        {% if e.comment %}<br><span class="description">{{ e.comment }}</span>{% endif %}</li>
+      {% endfor %}
+    </ul>
+  </section>
+</div>
+</div>
+{% endblock %}

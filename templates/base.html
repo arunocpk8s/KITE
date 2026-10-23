@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{{ app_name }} · Knowledge Transfer{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="{{ url_for('main.dashboard') }}">
+      {% if logo_file %}<img class="brand-logo" src="{{ url_for('static', filename=logo_file) }}" alt="Company logo">{% endif %}
+      <span class="brand-name">{{ app_name }}</span>
+      <span class="brand-sub">Knowledge Transfer</span>
+    </a>
+    {% if g.user %}
+    <nav>
+      <a href="{{ url_for('main.dashboard') }}">My accounts</a>
+      {% if g.user.is_admin %}
+      <a href="{{ url_for('admin.overview') }}">Admin console</a>
+      {% endif %}
+      <span class="who">{{ g.user.full_name }} &middot; {{ g.user.role_label }}</span>
+      <a href="{{ url_for('auth.logout') }}">Log out</a>
+    </nav>
+    {% endif %}
+  </header>
+  <main>
+    {% if temporary_database %}
+    <p class="flash flash-error">This deployment has no permanent database connected, so it uses a temporary one that is wiped often (users and data disappear).
+      Connect a Postgres database in Vercel (Storage) and redeploy.</p>
+    {% endif %}
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for category, message in messages %}
+      <p class="flash flash-{{ category }}">{{ message }}</p>
+      {% endfor %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+  </main>
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

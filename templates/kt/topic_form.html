@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}{{ "Edit topic" if topic else "Add topic" }} · {{ account.code }} · {{ app_name }}{% endblock %}
+{% block content %}
+{% set manager = g.user.can_manage(account) %}
+<p><a href="{{ url_for('kt.topic', code=account.code, topic_id=topic.id) if topic else url_for('kt.plan', code=account.code) }}">&larr;
+  {{ topic.title if topic else "KT plan · " ~ account.name }}</a></p>
+
+<section class="card">
+  <h2>{{ "Edit KT topic" if topic else "Add a KT topic" }}</h2>
+  {% if topic and not manager %}<p class="hint">As the SME you can update the description and materials. The KT lead manages the plan details.</p>{% endif %}
+  <form method="post" action="{{ url_for('kt.edit_topic', code=account.code, topic_id=topic.id) if topic else url_for('kt.new_topic', code=account.code) }}" novalidate>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="row">
+      <div>
+        <label for="title">Topic</label>
+        <input id="title" name="title" value="{{ form.title }}" maxlength="200" placeholder="e.g. Raising credit notes in SAP" required {% if not manager %}disabled{% endif %}>
+        {% if errors.title %}<p class="error">{{ errors.title }}</p>{% endif %}
+      </div>
+      <div>
+        <label for="module_id">Module</label>
+        <select id="module_id" name="module_id" {% if not manager %}disabled{% endif %}>
+          <option value="">Choose…</option>
+          {% for m in modules %}<option value="{{ m.id }}" {% if form.module_id == m.id|string %}selected{% endif %}>{{ m.title }}</option>{% endfor %}
+        </select>
+        {% if errors.module_id %}<p class="error">{{ errors.module_id }}</p>{% endif %}
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label for="sme_id">SME (delivers the KT)</label>
+        <select id="sme_id" name="sme_id" {% if not manager %}disabled{% endif %}>
+          <option value="">Not assigned yet</option>
+          {% for u in smes %}<option value="{{ u.id }}" {% if form.sme_id == u.id|string %}selected{% endif %}>{{ u.full_name }} ({{ u.role_label }})</option>{% endfor %}
+        </select>
+        {% if errors.sme_id %}<p class="error">{{ errors.sme_id }}</p>{% endif %}
+      </div>
+      <div class="row">
+        <div>
+          <label for="planned_date">Planned date</label>
+          <input id="planned_date" name="planned_date" type="date" value="{{ form.planned_date }}" {% if not manager %}disabled{% endif %}>
+          {% if errors.planned_date %}<p class="error">{{ errors.planned_date }}</p>{% endif %}
+        </div>
+        <div>
+          <label for="due_date">Target sign-off</label>
+          <input id="due_date" name="due_date" type="date" value="{{ form.due_date }}" {% if not manager %}disabled{% endif %}>
+          {% if errors.due_date %}<p class="error">{{ errors.due_date }}</p>{% endif %}
+        </div>
+      </div>
+    </div>
+    <label for="description">What the receivers must learn</label>
+    <textarea id="description" name="description" rows="5" maxlength="8000" placeholder="Scope, systems, steps, common problems, who to contact">{{ form.description }}</textarea>
+    {% if errors.description %}<p class="error">{{ errors.description }}</p>{% endif %}
+    <label for="materials">Materials (one link per line; optional label: <code>Runbook | https://...</code>)</label>
+    <textarea id="materials" name="materials" rows="4" placeholder="SOP | https://company.sharepoint.com/...">{{ form.materials }}</textarea>
+    <p class="hint">Links to SharePoint, Teams or recordings. Only https:// and http:// links are accepted.</p>
+    {% if errors.materials %}<p class="error">{{ errors.materials }}</p>{% endif %}
+    <fieldset class="checklist" {% if not manager %}disabled{% endif %}>
+      <legend>Receivers (who gets this KT)</legend>
+      {% for u in receivers %}
+      <label class="inline"><input type="checkbox" name="receivers" value="{{ u.id }}" {% if u.id in form.receiver_ids %}checked{% endif %}>
+        {{ u.full_name }} <span class="muted">({{ u.role_label }})</span></label>
+      {% else %}
+      <p class="muted">No members to choose from. An admin adds people to the account.</p>
+      {% endfor %}
+      {% if errors.receivers %}<p class="error">{{ errors.receivers }}</p>{% endif %}
+    </fieldset>
+    <button type="submit">{{ "Save topic" if topic else "Add topic" }}</button>
+    <a href="{{ url_for('kt.topic', code=account.code, topic_id=topic.id) if topic else url_for('kt.plan', code=account.code) }}">Cancel</a>
+  </form>
+</section>
+{% endblock %}

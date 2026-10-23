@@ -249,6 +249,17 @@
 </div>
 
 <div>
+  <section class="card card-soft card-steps" id="transition">
+    <h2>Transition</h2>
+    <ul class="plain-list">
+      {% for p in project.phases %}
+      <li><span class="{{ 'tick' if p.status == 'SIGNED_OFF' else 'pending' }}">{{ "&#10003;" | safe if p.status == "SIGNED_OFF" else "&#9675;" | safe }}</span>
+        {{ p.label }} <span class="phase-status phase-{{ p.status }}">{{ p.status_label }}</span></li>
+      {% endfor %}
+    </ul>
+    <p><a href="{{ url_for('transitions.view', code=account.code, project_id=project.id) }}">Open the transition plan</a></p>
+  </section>
+
   <section class="card">
     <h2>Details</h2>
     <dl class="details">
@@ -321,6 +332,10 @@
           "SIGN_OFF_REVOKED": "revoked the client sign-off", "INTERNAL_SCHEDULED": "scheduled an internal session",
           "INTERNAL_HELD": "recorded an internal session as held", "INTERNAL_COMPLETED": "completed internal KT",
           "DOCUMENT_ADDED": "added a document", "DOCUMENT_REMOVED": "removed a document",
+          "PHASE_PLANNED": "planned a transition phase", "PHASE_STARTED": "started a transition phase",
+          "PHASE_SIGNED_OFF": "signed off a transition phase", "PHASE_REOPENED": "reopened a transition phase",
+          "CRITERION_ADDED": "added an exit criterion", "CRITERION_MET": "met an exit criterion",
+          "CRITERION_REOPENED": "reopened an exit criterion", "CRITERION_REMOVED": "removed an exit criterion",
         } %}
         {{ labels.get(e.event_type, "updated the project") }}
         {% if e.detail %}<br><span class="description">{{ e.detail }}</span>{% endif %}</li>

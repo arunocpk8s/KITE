@@ -8,8 +8,9 @@ from datetime import datetime, time, timedelta
 from flask import Blueprint, Response, g, render_template, request
 
 from auth import login_required
-from models import Change, KTProject, KTTopic, ProjectTeamMember, Question, Sop, User
+from models import TRANSITION_PHASES, Change, KTProject, KTTopic, ProjectTeamMember, Question, Sop, User
 from projects import STAGES, project_state
+from transitions import current_phase
 from timeutil import IST, ist_today
 
 bp = Blueprint("reports", __name__, url_prefix="/reports")
@@ -146,6 +147,11 @@ def overview():
 
     stage_counts = [(label, sum(1 for _, s in states if s["stage"] == key)) for key, label in STAGES.items()]
     stage_top = max([n for _, n in stage_counts] + [1])
+    phase_keys = [current_phase(p).phase if p.phases and current_phase(p) else ("DONE" if p.phases else None)
+                  for p in projects]
+    phase_counts = [(label, phase_keys.count(key)) for key, label in
+                    list(TRANSITION_PHASES.items()) + [("DONE", "Steady state signed off")]]
+    phase_top = max([n for _, n in phase_counts] + [1])
     doubt_rows = [(a.code, [q for q in questions if q.account_id == a.id]) for a in scope] if many else \
         [(p.name, [q for q in questions if q.project_id == p.id]) for p in projects] + \
         [("No project", [q for q in questions if q.project_id is None])]
@@ -164,6 +170,7 @@ def overview():
         kt=stacked_bars([(name(p), [t for t in p.topics if t.status != "CANCELLED"]) for p in projects], KT_GROUPS),
         trend=signoff_trend(active, today),
         stages=[{"label": label, "count": n, "height": round(100 * n / stage_top, 1)} for label, n in stage_counts],
+        phases=[{"label": label, "count": n, "height": round(100 * n / phase_top, 1)} for label, n in phase_counts],
         acks=[{"change": c, "done": len(c.acked), "total": len(c.acks),
                "pct": round(100 * len(c.acked) / len(c.acks)) if c.acks else 100} for c in changes],
         doubts=stacked_bars([r for r in doubt_rows if r[1]], DOUBT_GROUPS),

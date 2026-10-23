@@ -377,6 +377,8 @@ class KTProject(db.Model):
                                 order_by="(ProjectDocument.doc_type, ProjectDocument.title)")
     events = db.relationship("ProjectEvent", back_populates="project", order_by="ProjectEvent.id",
                              passive_deletes="all")
+    phases = db.relationship("TransitionPhase", back_populates="project", cascade="all, delete-orphan",
+                             order_by="TransitionPhase.position")
 
     @property
     def topics(self):
@@ -637,6 +639,98 @@ class ScopeItem(db.Model):
     updated_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
 
     updated_by = db.relationship("User")
+
+
+# --- Transition phases ---------------------------------------------------------------------------
+# Each project moves through these in order. A phase starts once the previous one is signed off, and is
+# signed off by a KT lead when all its exit criteria are met (the KT phase also needs the client's
+# sign-off of the project's KT).
+TRANSITION_PHASES = {
+    "KT": "Knowledge transfer",
+    "SHADOW": "Shadow",
+    "REVERSE_SHADOW": "Reverse shadow",
+    "STEADY_STATE": "Steady state",
+}
+PHASE_STATUS_LABELS = {"NOT_STARTED": "Not started", "IN_PROGRESS": "In progress", "SIGNED_OFF": "Signed off"}
+DEFAULT_EXIT_CRITERIA = {
+    "KT": ("Access to all systems in place for the whole team",
+           "KT documents and recordings in the SharePoint KT folder"),
+    "SHADOW": ("Team shadowed the client on live work for the agreed period",
+               "Volumes, SLAs and peak periods observed and recorded",
+               "Doubts raised during shadowing resolved"),
+    "REVERSE_SHADOW": ("Team ran the work with the client watching",
+                       "SLAs met during reverse shadow",
+                       "Client confirms the team can run the work independently"),
+    "STEADY_STATE": ("Hypercare period completed",
+                     "Escalation path and on-call agreed",
+                     "Steady-state reporting agreed with the client"),
+}
+
+
+class TransitionPhase(db.Model):
+    __tablename__ = "transition_phases"
+    __table_args__ = (db.UniqueConstraint("project_id", "phase", name="uq_transition_phase"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.Integer, db.ForeignKey("kt_projects.id"), nullable=False, index=True)
+    phase = db.Column(db.String(20), nullable=False)
+    position = db.Column(db.Integer, nullable=False)
+    planned_start = db.Column(db.Date)
+    planned_end = db.Column(db.Date)
+    actual_start = db.Column(db.Date)
+    actual_end = db.Column(db.Date)
+    status = db.Column(db.String(12), nullable=False, default="NOT_STARTED")
+    signed_off_at = db.Column(db.DateTime)
+    signed_off_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    signoff_comment = db.Column(db.Text, nullable=False, default="")
+
+    project = db.relationship("KTProject", back_populates="phases")
+    signed_off_by = db.relationship("User")
+    criteria = db.relationship("ExitCriterion", back_populates="phase", cascade="all, delete-orphan",
+                               order_by="(ExitCriterion.position, ExitCriterion.id)")
+
+    @property
+    def label(self):
+        return TRANSITION_PHASES[self.phase]
+
+    @property
+    def status_label(self):
+        return PHASE_STATUS_LABELS[self.status]
+
+    @property
+    def criteria_done(self):
+        return sum(1 for c in self.criteria if c.done_at)
+
+    def is_late(self, today):
+        return self.status != "SIGNED_OFF" and self.planned_end is not None and today > self.planned_end
+
+
+class ExitCriterion(db.Model):
+    __tablename__ = "exit_criteria"
+
+    id = db.Column(db.Integer, primary_key=True)
+    phase_id = db.Column(db.Integer, db.ForeignKey("transition_phases.id"), nullable=False, index=True)
+    title = db.Column(db.String(300), nullable=False)
+    position = db.Column(db.Integer, nullable=False, default=0)
+    done_at = db.Column(db.DateTime)
+    done_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    note = db.Column(db.Text, nullable=False, default="")
+    evidence_link = db.Column(db.String(500), nullable=False, default="")
+
+    phase = db.relationship("TransitionPhase", back_populates="criteria")
+    done_by = db.relationship("User")
+
+
+def ensure_phases(project):
+    """Give the project its four transition phases with the default exit criteria (once). True if added."""
+    if project.phases:
+        return False
+    for i, key in enumerate(TRANSITION_PHASES, start=1):
+        phase = TransitionPhase(phase=key, position=i)
+        for j, title in enumerate(DEFAULT_EXIT_CRITERIA[key], start=1):
+            phase.criteria.append(ExitCriterion(title=title, position=j))
+        project.phases.append(phase)
+    return True
 
 
 # --- Transactions and change log -----------------------------------------------------------------
@@ -922,4 +1016,7 @@ def upgrade_schema():
             db.session.add(projects[module.account_id])
         module.project = projects[module.account_id]
     if orphans:
+        db.session.commit()
+    # Projects from before transition phases get theirs.
+    if any([ensure_phases(p) for p in KTProject.query.all()]):
         db.session.commit()

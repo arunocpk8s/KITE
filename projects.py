@@ -22,7 +22,7 @@ from auth import login_required
 from kt import TIME_RE, URL_RE, members_of, visible_account_or_404
 from models import (
     DEFAULT_CHECKLIST, DOC_TYPES, InternalSession, KTProject, KTTopic, ProjectChecklistItem, ProjectDocument,
-    ProjectTeamMember, User, add_project_event, db,
+    ProjectTeamMember, User, add_project_event, db, ensure_phases,
 )
 from timeutil import format_ist, ist_local_to_utc, parse_date, utcnow
 
@@ -205,6 +205,7 @@ def new_project(code):
     _apply_project(project, data)
     for i, title in enumerate(DEFAULT_CHECKLIST, start=1):
         project.checklist.append(ProjectChecklistItem(title=title, position=i))
+    ensure_phases(project)
     db.session.add(project)
     add_project_event(project, g.user, "CREATED")
     db.session.commit()
@@ -247,6 +248,8 @@ def edit_project(code, project_id):
 def project(code, project_id):
     account = visible_account_or_404(code)
     project = _project_or_404(account, project_id)
+    if ensure_phases(project):
+        db.session.commit()
     state = project_state(project)
     return render_template(
         "projects/project.html", account=account, project=project, state=state, stages=STAGES,
@@ -433,6 +436,9 @@ def revoke_signoff(code, project_id):
     reason = request.form.get("reason", "").strip()[:2000]
     if not project.client_signed:
         abort(400, description="The project has not been signed off.")
+    if any(p.phase == "KT" and p.status == "SIGNED_OFF" for p in project.phases):
+        flash("The KT transition phase is signed off. Reopen it on the transition plan before revoking.", "error")
+        return _back(project, "#sign-off")
     if not reason:
         flash("Give a reason for revoking the client sign-off.", "error")
         return _back(project, "#sign-off")

@@ -8,6 +8,7 @@ from models import (
     db,
 )
 from projects import project_state
+from transitions import can_start, current_phase, sign_off_blockers
 from timeutil import ist_today, utcnow
 
 REVIEW_SOON_DAYS = 14
@@ -112,6 +113,12 @@ def next_steps(user, today=None):
                 steps.append(_step(f"Get the client's sign-off for '{p.name}'",
                                    url_for("projects.project", code=account.code, project_id=p.id) + "#sign-off",
                                    account))
+            phase = current_phase(p) if p.phases else None
+            link = url_for("transitions.view", code=account.code, project_id=p.id)
+            if phase is not None and phase.status == "IN_PROGRESS" and not sign_off_blockers(phase):
+                steps.append(_step(f"Sign off {phase.label} for '{p.name}': every exit criterion is met", link, account))
+            elif phase is not None and can_start(phase) and phase.position > 1:
+                steps.append(_step(f"Start {phase.label} for '{p.name}'", link, account))
         for q in Question.query.filter(Question.account_id == account.id, Question.assigned_to_id.is_(None),
                                        Question.status != "RESOLVED").all():
             steps.append(_step(f"Assign {q.code} to an SME: {q.title}",

@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block title %}Transition · {{ project.name }} · {{ account.code }} · {{ app_name }}{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('projects.project', code=account.code, project_id=project.id) }}">&larr; {{ project.name }}</a></p>
+<h1>Transition plan <span class="muted">· {{ project.name }}</span>
+  {% if not current %}<span class="stage stage-COMPLETE">Steady state reached</span>{% endif %}</h1>
+
+<ol class="steps">
+  {% for p in project.phases %}
+  <li class="{{ 'step-done' if p.status == 'SIGNED_OFF' }} {{ 'step-current' if current and p.id == current.id }}">
+    <strong>{{ loop.index }}. {{ p.label }}</strong><br>
+    <span class="phase-status phase-{{ p.status }}">{{ p.status_label }}</span>
+    <span class="muted">{{ p.criteria_done }}/{{ p.criteria | length }} criteria</span>
+    {% if p.is_late(today) %}<br><span class="overdue">Past planned end</span>{% endif %}
+  </li>
+  {% endfor %}
+</ol>
+
+{% for p in project.phases %}
+<section class="card phase-card {{ 'phase-card-current' if current and p.id == current.id }}" id="phase-{{ p.id }}">
+  <div class="module-head">
+    <h2>{{ loop.index }}. {{ p.label }}</h2>
+    <span class="phase-status phase-{{ p.status }}">{{ p.status_label }}</span>
+    <span class="push-right muted">
+      Planned {{ p.planned_start | date or "?" }} – {{ p.planned_end | date or "?" }}
+      {% if p.actual_start %} · Actual {{ p.actual_start | date }} – {{ p.actual_end | date or "now" }}{% endif %}
+    </span>
+  </div>
+  {% if p.status == "SIGNED_OFF" %}
+  <p><span class="tick">&#10003;</span> Signed off {{ p.signed_off_at | ist }} by {{ p.signed_off_by.full_name }}{% if p.signoff_comment %} · <span class="description">{{ p.signoff_comment }}</span>{% endif %}</p>
+  {% endif %}
+
+  <h3>Exit criteria</h3>
+  <ul class="plain-list">
+    {% if p.phase == "KT" %}
+    <li>{% if project.client_signed %}<span class="tick">&#10003;</span> <strong>Client signed off the project's KT</strong> <span class="muted">{{ project.client_signed_at | ist }}</span>
+      {% else %}<span class="pending">&#9675;</span> Client signs off the project's KT <span class="muted">(automatic: <a href="{{ url_for('projects.project', code=account.code, project_id=project.id) }}#sign-off">project sign-off</a>)</span>{% endif %}</li>
+    {% endif %}
+    {% for c in p.criteria %}
+    <li>
+      {% if c.done_at %}
+      <span class="tick">&#10003;</span> <strong>{{ c.title }}</strong> <span class="muted">{{ c.done_at | ist }} by {{ c.done_by.full_name }}</span>
+      {% if c.note %} · <span class="description">{{ c.note }}</span>{% endif %}
+      {% if c.evidence_link %} · <a href="{{ c.evidence_link }}" target="_blank" rel="noopener noreferrer">Evidence</a>{% endif %}
+      {% if manager and p.status != "SIGNED_OFF" %}
+      <form class="inline" method="post" action="{{ url_for('transitions.criterion_undo', code=account.code, project_id=project.id, phase_id=p.id, criterion_id=c.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button type="submit" class="link-button">Reopen</button>
+      </form>
+      {% endif %}
+      {% else %}
+      <span class="pending">&#9675;</span> {{ c.title }}
+      {% if can_tick and p.status == "IN_PROGRESS" %}
+      <details>
+        <summary>Mark met</summary>
+        <form method="post" action="{{ url_for('transitions.criterion_done', code=account.code, project_id=project.id, phase_id=p.id, criterion_id=c.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="row">
+            <div><label for="n-{{ c.id }}">Note (optional)</label><input id="n-{{ c.id }}" name="note" maxlength="2000"></div>
+            <div><label for="e-{{ c.id }}">Evidence link (optional)</label><input id="e-{{ c.id }}" name="evidence_link" placeholder="https://..."></div>
+          </div>
+          <button type="submit" class="small">Mark met</button>
+        </form>
+      </details>
+      {% endif %}
+      {% if manager and p.status != "SIGNED_OFF" %}
+      <form class="inline" method="post" action="{{ url_for('transitions.delete_criterion', code=account.code, project_id=project.id, phase_id=p.id, criterion_id=c.id) }}" data-confirm="Remove this exit criterion?">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button type="submit" class="link-button">Remove</button>
+      </form>
+      {% endif %}
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+
+  {% if manager %}
+  <div class="phase-actions">
+    {% if p.status != "SIGNED_OFF" %}
+    <form class="inline-form wide" method="post" action="{{ url_for('transitions.add_criterion', code=account.code, project_id=project.id, phase_id=p.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input name="title" maxlength="300" placeholder="Add an exit criterion" aria-label="New exit criterion for {{ p.label }}">
+      <button type="submit" class="small">Add</button>
+    </form>
+    <details>
+      <summary>Planned dates</summary>
+      <form method="post" action="{{ url_for('transitions.plan_dates', code=account.code, project_id=project.id, phase_id=p.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="row">
+          <div><label for="ps-{{ p.id }}">Planned start</label><input id="ps-{{ p.id }}" name="planned_start" type="date" value="{{ p.planned_start or '' }}"></div>
+          <div><label for="pe-{{ p.id }}">Planned end</label><input id="pe-{{ p.id }}" name="planned_end" type="date" value="{{ p.planned_end or '' }}"></div>
+        </div>
+        <button type="submit" class="small">Save dates</button>
+      </form>
+    </details>
+    {% endif %}
+    {% if can_start(p) %}
+    <form method="post" action="{{ url_for('transitions.start', code=account.code, project_id=project.id, phase_id=p.id) }}" data-confirm="Start the {{ p.label }} phase and tell the team?">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit">Start {{ p.label }}</button>
+    </form>
+    {% elif p.status == "IN_PROGRESS" %}
+    {% set left = blockers(p) %}
+    {% if left %}
+    <p class="hint">Sign-off opens when nothing is left: {{ left | join("; ") }}.</p>
+    {% else %}
+    <form method="post" action="{{ url_for('transitions.sign_off', code=account.code, project_id=project.id, phase_id=p.id) }}" data-confirm="Sign off the {{ p.label }} phase?">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label for="c-{{ p.id }}">Comment (optional)</label>
+      <input id="c-{{ p.id }}" name="comment" maxlength="2000">
+      <button type="submit">Sign off {{ p.label }}</button>
+    </form>
+    {% endif %}
+    {% endif %}
+    {% if p in reopenable %}
+    <details>
+      <summary>Reopen this phase</summary>
+      <form method="post" action="{{ url_for('transitions.reopen', code=account.code, project_id=project.id, phase_id=p.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label for="r-{{ p.id }}">Reason</label>
+        <textarea id="r-{{ p.id }}" name="reason" rows="2" maxlength="2000" required></textarea>
+        <button type="submit" class="danger">Reopen</button>
+      </form>
+    </details>
+    {% endif %}
+  </div>
+  {% endif %}
+</section>
+{% endfor %}
+{% endblock %}

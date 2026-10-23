@@ -110,6 +110,20 @@
   </section>
 
   <section class="card viz-card">
+    <h2>Projects by transition phase</h2>
+    <p class="viz-sub">The phase each project is in now: KT, shadow, reverse shadow, steady state</p>
+    <div class="columns columns-5">
+      {% for s in phases %}
+      <div class="col" tabindex="0" data-tip-value="{{ s.count }} project{{ '' if s.count == 1 else 's' }}" data-tip-label="{{ s.label }}">
+        <span class="col-value">{{ s.count }}</span>
+        <span class="col-bar col-grow" style="height: {{ [s.height, 2] | max }}%; background: {{ series }}; --i: {{ loop.index0 }}"></span>
+        <span class="col-label">{{ s.label }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="card viz-card">
     <h2>Change acknowledgements</h2>
     <p class="viz-sub">Latest published changes: share of the team who acknowledged</p>
     {% if acks %}

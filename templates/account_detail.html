@@ -29,7 +29,7 @@
   {% if projects %}
   <div class="table-wrap">
   <table>
-    <thead><tr><th>Project</th><th>Stage</th><th>KT signed off</th><th>Checklist</th><th>Client sign-off</th><th>Internal KT</th><th>Target</th></tr></thead>
+    <thead><tr><th>Project</th><th>Stage</th><th>KT signed off</th><th>Checklist</th><th>Client sign-off</th><th>Internal KT</th><th>Transition</th><th>Target</th></tr></thead>
     <tbody>
       {% for p, s in projects %}
       <tr>
@@ -39,6 +39,7 @@
         <td>{{ s.checklist_done }}/{{ s.checklist_total }}</td>
         <td>{% if p.client_signed %}{{ p.client_signed_at | ist }}{% else %}<span class="muted">Not yet</span>{% endif %}</td>
         <td>{% if s.team_total %}{{ s.team_done }}/{{ s.team_total }}{% else %}<span class="muted">No team set</span>{% endif %}</td>
+        <td>{% set cur = p.phases | selectattr('status', 'ne', 'SIGNED_OFF') | first %}{% if not p.phases %}<span class="muted">—</span>{% elif cur %}{{ cur.label }} <span class="muted">({{ cur.status_label | lower }})</span>{% else %}<span class="stage stage-COMPLETE">Steady state</span>{% endif %}</td>
         <td>{{ p.target_date | date or "—" }}</td>
       </tr>
       {% endfor %}

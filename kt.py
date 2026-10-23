@@ -1,12 +1,14 @@
-"""KT tracker: an account's KT plan (modules and topics), sessions, ratings, status workflow and history.
+"""KT tracker: an account's KT plan (projects -> modules -> topics), sessions, ratings, receiver
+confirmation, status workflow and history.
 
 Who may do what (all checked on the server):
 - Members of the account (and admins) can view the KT plan.
 - KT leads of the account and admins plan it: modules, topics, SME and receivers; they also sign off,
-  cancel and reopen topics.
+  cancel and reopen topics. A topic is signed off only after every receiver has confirmed receiving it.
 - The topic's SME runs it: schedules and records sessions, edits materials, and moves the status up to
   Reverse KT.
-- Receivers rate their own understanding. Viewers only read.
+- Receivers rate their own understanding and confirm they received the KT. Viewers only read.
+- Once the client has signed off a project (projects.py), its modules and topics are locked.
 """
 import csv
 import io
@@ -19,7 +21,7 @@ import notify
 from auth import login_required
 from models import (
     KT_CLOSED, KT_LEAD_ONLY, KT_STATUS_LABELS, KT_STATUSES, KT_TRANSITIONS, LOW_RATING, Account, KTAttendance,
-    KTModule, KTRating, KTReceiver, KTSession, KTTopic, User, add_kt_event, db, kt_can_move,
+    KTModule, KTProject, KTRating, KTReceiver, KTSession, KTTopic, User, add_kt_event, db, kt_can_move,
 )
 from timeutil import format_date, format_ist, ist_local_to_utc, ist_today, parse_date, utcnow
 
@@ -92,12 +94,12 @@ def _bad_link_lines(text):
     return bad
 
 
-def _members(account):
+def members_of(account):
     return account.member_users().filter(User.active.is_(True)).all()
 
 
 def _leads(account):
-    return [u for u in _members(account) if u.role == "kt_lead"]
+    return [u for u in members_of(account) if u.role == "kt_lead"]
 
 
 # --- plan ----------------------------------------------------------------------------------------
@@ -129,7 +131,9 @@ def plan(code):
     account = visible_account_or_404(code)
     status = request.args.get("status", "").upper()
     who = request.args.get("who", "")
-    modules = KTModule.query.filter_by(account_id=account.id).order_by(KTModule.position, KTModule.id).all()
+    project_id = request.args.get("project", "")
+    projects = _projects(account)
+    shown = [p for p in projects if not project_id or str(p.id) == project_id]
     today = ist_today()
 
     def keep(topic):
@@ -143,11 +147,12 @@ def plan(code):
             return False
         return True
 
-    sections = [(m, [t for t in m.topics if keep(t)], _module_progress(m)) for m in modules]
+    sections = [(p, [(m, [t for t in m.topics if keep(t)], _module_progress(m)) for m in p.modules])
+                for p in shown]
     return render_template(
         "kt/plan.html", account=account, sections=sections, stats=plan_stats(account, today), today=today,
-        filters={"status": status, "who": who}, statuses=KT_STATUSES, labels=KT_STATUS_LABELS,
-        can_manage=g.user.can_manage(account),
+        filters={"status": status, "who": who, "project": project_id}, statuses=KT_STATUSES,
+        labels=KT_STATUS_LABELS, can_manage=g.user.can_manage(account), projects=projects,
     )
 
 
@@ -158,34 +163,55 @@ def export(code):
     today = ist_today()
     out = io.StringIO()
     writer = csv.writer(out)
-    writer.writerow(["Module", "Topic", "Status", "SME", "Receivers", "Planned date", "Target sign-off",
-                     "Overdue", "Sessions held", "Average understanding", "Signed off"])
-    modules = KTModule.query.filter_by(account_id=account.id).order_by(KTModule.position, KTModule.id)
-    for m in modules:
-        for t in m.topics:
-            writer.writerow([
-                m.title, t.title, t.status_label, t.sme.full_name if t.sme else "",
-                "; ".join(u.full_name for u in t.receiver_users), format_date(t.planned_date),
-                format_date(t.due_date), "yes" if t.is_overdue(today) else "",
-                sum(1 for s in t.sessions if s.held), t.average_rating or "", format_ist(t.signed_off_at),
-            ])
+    writer.writerow(["Project", "Module", "Topic", "Status", "SME", "Receivers", "Receivers confirmed",
+                     "Planned date", "Target sign-off", "Overdue", "Sessions held", "Average understanding",
+                     "Signed off"])
+    for p in _projects(account):
+        for m in p.modules:
+            for t in m.topics:
+                writer.writerow([
+                    p.name, m.title, t.title, t.status_label, t.sme.full_name if t.sme else "",
+                    "; ".join(u.full_name for u in t.receiver_users),
+                    f"{len(t.receivers) - len(t.unconfirmed_receivers)}/{len(t.receivers)}",
+                    format_date(t.planned_date), format_date(t.due_date), "yes" if t.is_overdue(today) else "",
+                    sum(1 for s in t.sessions if s.held), t.average_rating or "", format_ist(t.signed_off_at),
+                ])
     # Excel opens UTF-8 CSV correctly with a byte-order mark.
     return Response("﻿" + out.getvalue(), mimetype="text/csv",
                     headers={"Content-Disposition": f'attachment; filename="kite-kt-{account.code}-{today}.csv"'})
 
 
 # --- modules -------------------------------------------------------------------------------------
+SIGNED_PROJECT = "The client has signed off this project, so its KT plan is locked. Revoke the sign-off to change it."
+
+
+def _projects(account):
+    return KTProject.query.filter_by(account_id=account.id).order_by(KTProject.position, KTProject.id).all()
+
+
 def _read_module(form):
-    return {"title": " ".join(form.get("title", "").split()), "description": form.get("description", "").strip()}
+    return {"title": " ".join(form.get("title", "").split()), "description": form.get("description", "").strip(),
+            "project_id": form.get("project_id", "")}
 
 
-def _validate_module(data):
+def _validate_module(account, data, module=None):
     errors = {}
     if not data["title"] or len(data["title"]) > 200:
         errors["title"] = "Enter a module title (up to 200 characters)."
     if len(data["description"]) > 4000:
         errors["description"] = "At most 4,000 characters."
+    project = db.session.get(KTProject, int(data["project_id"])) if data["project_id"].isdigit() else None
+    if project is None or project.account_id != account.id:
+        errors["project_id"] = "Choose a project."
+    elif project.client_signed or (module is not None and module.project.client_signed
+                                   and module.project_id != project.id):
+        errors["project_id"] = SIGNED_PROJECT
     return errors
+
+
+def _render_module_form(account, module, data, errors):
+    return render_template("kt/module_form.html", account=account, module=module, form=data, errors=errors,
+                           projects=_projects(account)), (400 if errors else 200)
 
 
 @bp.route("/modules/new", methods=["GET", "POST"])
@@ -193,13 +219,17 @@ def _validate_module(data):
 def new_module(code):
     account = visible_account_or_404(code)
     _require_manager(account)
-    data = _read_module(request.form) if request.method == "POST" else {"title": "", "description": ""}
-    errors = _validate_module(data) if request.method == "POST" else {}
+    if request.method == "GET" and not _projects(account):
+        flash("Add a project first; KT modules belong to a project.", "info")
+        return redirect(url_for("projects.new_project", code=account.code))
+    data = _read_module(request.form) if request.method == "POST" else \
+        {"title": "", "description": "", "project_id": request.args.get("project", "")}
+    errors = _validate_module(account, data) if request.method == "POST" else {}
     if request.method == "GET" or errors:
-        return render_template("kt/module_form.html", account=account, module=None, form=data, errors=errors), \
-            (400 if errors else 200)
+        return _render_module_form(account, None, data, errors)
     position = (db.session.query(func.max(KTModule.position)).filter_by(account_id=account.id).scalar() or 0) + 1
-    module = KTModule(account_id=account.id, position=position, **data)
+    module = KTModule(account_id=account.id, position=position, title=data["title"],
+                      description=data["description"], project_id=int(data["project_id"]))
     db.session.add(module)
     db.session.commit()
     flash(f"Module '{module.title}' added. Add its topics next.", "success")
@@ -212,13 +242,13 @@ def edit_module(code, module_id):
     account = visible_account_or_404(code)
     _require_manager(account)
     module = _module_or_404(account, module_id)
-    data = _read_module(request.form) if request.method == "POST" else {"title": module.title,
-                                                                         "description": module.description}
-    errors = _validate_module(data) if request.method == "POST" else {}
+    data = _read_module(request.form) if request.method == "POST" else \
+        {"title": module.title, "description": module.description, "project_id": str(module.project_id or "")}
+    errors = _validate_module(account, data, module) if request.method == "POST" else {}
     if request.method == "GET" or errors:
-        return render_template("kt/module_form.html", account=account, module=module, form=data, errors=errors), \
-            (400 if errors else 200)
+        return _render_module_form(account, module, data, errors)
     module.title, module.description = data["title"], data["description"]
+    module.project_id = int(data["project_id"])
     db.session.commit()
     flash("Module saved.", "success")
     return redirect(url_for("kt.plan", code=account.code) + f"#module-{module.id}")
@@ -256,7 +286,7 @@ def _read_topic(form):
     }
 
 
-def _validate_topic(account, data):
+def _validate_topic(account, data, topic=None):
     errors = {}
     if not data["title"] or len(data["title"]) > 200:
         errors["title"] = "Enter a topic title (up to 200 characters)."
@@ -265,7 +295,10 @@ def _validate_topic(account, data):
     module = db.session.get(KTModule, int(data["module_id"])) if data["module_id"].isdigit() else None
     if module is None or module.account_id != account.id:
         errors["module_id"] = "Choose a module."
-    member_ids = {u.id for u in _members(account)}
+    elif (topic is None or topic.module_id != module.id) and (
+            module.project.client_signed or (topic is not None and topic.module.project.client_signed)):
+        errors["module_id"] = SIGNED_PROJECT
+    member_ids = {u.id for u in members_of(account)}
     if data["sme_id"] and (not data["sme_id"].isdigit() or int(data["sme_id"]) not in member_ids):
         errors["sme_id"] = "The SME must be an active member of this account."
     if set(data["receiver_ids"]) - member_ids:
@@ -286,7 +319,7 @@ def _validate_topic(account, data):
 
 
 def _render_topic_form(account, topic, data, errors, status=200):
-    members = _members(account)
+    members = members_of(account)
     return render_template(
         "kt/topic_form.html", account=account, topic=topic, form=data, errors=errors,
         modules=KTModule.query.filter_by(account_id=account.id).order_by(KTModule.position, KTModule.id).all(),
@@ -373,7 +406,7 @@ def edit_topic(code, topic_id):
         data.update(title=topic.title, module_id=str(topic.module_id), sme_id=str(topic.sme_id or ""),
                     planned_date=str(topic.planned_date or ""), due_date=str(topic.due_date or ""),
                     receiver_ids=sorted(r.user_id for r in topic.receivers))
-    errors = _validate_topic(account, data)
+    errors = _validate_topic(account, data, topic)
     if errors:
         return _render_topic_form(account, topic, data, errors, 400)
     old_sme = topic.sme_id
@@ -401,7 +434,8 @@ def topic(code, topic_id):
         "kt/topic.html", account=account, topic=topic, today=ist_today(), labels=KT_STATUS_LABELS,
         can_manage=g.user.can_manage(account), can_run=can_run(g.user, account, topic),
         moves=allowed_moves(g.user, account, topic), links=parse_links(topic.materials),
-        is_receiver=topic.is_receiver(g.user), my_rating=my_rating, low_rating=LOW_RATING, now=utcnow(),
+        is_receiver=topic.is_receiver(g.user), my_receipt=topic.receiver(g.user), my_rating=my_rating,
+        low_rating=LOW_RATING, now=utcnow(), can_confirm=topic.status in CONFIRMABLE,
     )
 
 
@@ -410,6 +444,7 @@ def _topic_body(topic, intro):
     return (
         f"{intro}\n\n"
         f"Account: {topic.account.code} - {topic.account.name}\n"
+        f"Project: {topic.module.project.name}\n"
         f"Module:  {topic.module.title}\n"
         f"Topic:   {topic.title}\n"
         f"SME:     {sme}\n"
@@ -444,17 +479,53 @@ def change_status(code, topic_id):
         abort(400, description=f"A {topic.status_label} topic cannot move to {KT_STATUS_LABELS.get(new, new)}.")
     if new not in allowed_moves(g.user, account, topic):
         abort(403)
+    if topic.module.project.client_signed:
+        abort(400, description=SIGNED_PROJECT)
+    back = redirect(url_for("kt.topic", code=account.code, topic_id=topic.id))
     if new == "CANCELLED" and not comment:
         flash("Give a reason for cancelling the topic.", "error")
-        return redirect(url_for("kt.topic", code=account.code, topic_id=topic.id))
+        return back
+    if new == "SIGNED_OFF" and (not topic.receivers or topic.unconfirmed_receivers):
+        flash("Every receiver must confirm they received this KT before it is signed off. Waiting for: "
+              + (", ".join(u.full_name for u in topic.unconfirmed_receivers) or "add the receivers first") + ".",
+              "error")
+        return back
+    from projects import project_state, tell_if_ready  # projects imports this module
+    was_ready = project_state(topic.module.project)["ready"]
     _move(topic, new, comment)
     db.session.commit()
     if new == "SIGNED_OFF":
         people = [u.email for u in topic.receiver_users] + ([topic.sme.email] if topic.sme else [])
         notify.send(people, f"[{account.code}] KT signed off: {topic.title}",
                     _topic_body(topic, f"{g.user.full_name} signed off this KT topic."))
+    tell_if_ready(topic.module.project, was_ready)
     flash(f"Topic is now {topic.status_label}.", "success")
-    return redirect(url_for("kt.topic", code=account.code, topic_id=topic.id))
+    return back
+
+
+# --- receiver confirmation -----------------------------------------------------------------------
+# Receivers confirm once the KT has been given to them.
+CONFIRMABLE = ("DELIVERED", "REVERSE_KT")
+
+
+@bp.route("/topics/<int:topic_id>/confirm", methods=["POST"])
+@login_required
+def confirm_receipt(code, topic_id):
+    account = visible_account_or_404(code)
+    topic = _topic_or_404(account, topic_id)
+    receipt = topic.receiver(g.user)
+    if receipt is None:
+        abort(403)
+    if topic.status not in CONFIRMABLE:
+        abort(400, description="You can confirm once the KT has been delivered and before it is signed off.")
+    receipt.confirmed_at, receipt.confirm_note = utcnow(), request.form.get("note", "").strip()[:2000]
+    add_kt_event(topic, g.user, "RECEIPT_CONFIRMED", comment=receipt.confirm_note or None)
+    db.session.commit()
+    if not topic.unconfirmed_receivers:
+        notify.send([u.email for u in _leads(account)], f"[{account.code}] All receivers confirmed: {topic.title}",
+                    _topic_body(topic, "Every receiver has confirmed they received this KT. It can be signed off."))
+    flash("Thanks, your confirmation is recorded.", "success")
+    return redirect(url_for("kt.topic", code=account.code, topic_id=topic.id) + "#receivers")
 
 
 # --- sessions ------------------------------------------------------------------------------------

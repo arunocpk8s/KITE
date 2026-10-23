@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}{{ "Edit project" if project else "Add project" }} · {{ account.code }} · {{ app_name }}{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('projects.project', code=account.code, project_id=project.id) if project else url_for('main.account_detail', code=account.code) }}">&larr;
+  {{ project.name if project else account.name }}</a></p>
+
+<section class="card narrow-form">
+  <h2>{{ "Edit project" if project else "Add a project" }}</h2>
+  {% if not project %}<p class="hint">A project is a piece of the client's work your team takes over. It gets its own KT plan, a standard hand-over checklist (you can change it), client sign-off, internal KT for the team, and a place for its SharePoint KT documents.</p>{% endif %}
+  <form method="post" action="{{ url_for('projects.edit_project', code=account.code, project_id=project.id) if project else url_for('projects.new_project', code=account.code) }}" novalidate>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label for="name">Project name</label>
+    <input id="name" name="name" value="{{ form.name }}" maxlength="200" placeholder="e.g. Order-to-cash support" required autofocus>
+    {% if errors.name %}<p class="error">{{ errors.name }}</p>{% endif %}
+    <label for="description">Description (optional)</label>
+    <textarea id="description" name="description" rows="3" maxlength="4000">{{ form.description }}</textarea>
+    {% if errors.description %}<p class="error">{{ errors.description }}</p>{% endif %}
+    <div class="row">
+      <div><label for="start_date">KT start</label><input id="start_date" name="start_date" type="date" value="{{ form.start_date }}">
+        {% if errors.start_date %}<p class="error">{{ errors.start_date }}</p>{% endif %}</div>
+      <div><label for="target_date">Target completion</label><input id="target_date" name="target_date" type="date" value="{{ form.target_date }}">
+        {% if errors.target_date %}<p class="error">{{ errors.target_date }}</p>{% endif %}</div>
+    </div>
+    <label for="sharepoint_url">SharePoint KT folder</label>
+    <input id="sharepoint_url" name="sharepoint_url" value="{{ form.sharepoint_url }}" maxlength="500" placeholder="https://yourcompany.sharepoint.com/sites/.../KT">
+    <p class="hint">Where the project's KT documents and recordings are kept. KITE links to SharePoint; files stay there.</p>
+    {% if errors.sharepoint_url %}<p class="error">{{ errors.sharepoint_url }}</p>{% endif %}
+
+    <fieldset class="checklist">
+      <legend>Client approver (signs off the KT)</legend>
+      <div class="row">
+        <div><label for="client_approver_name">Name</label><input id="client_approver_name" name="client_approver_name" value="{{ form.client_approver_name }}" maxlength="120">
+          {% if errors.client_approver_name %}<p class="error">{{ errors.client_approver_name }}</p>{% endif %}</div>
+        <div><label for="client_approver_email">Email</label><input id="client_approver_email" name="client_approver_email" type="email" value="{{ form.client_approver_email }}" maxlength="200">
+          {% if errors.client_approver_email %}<p class="error">{{ errors.client_approver_email }}</p>{% endif %}</div>
+      </div>
+      <p class="hint">If the approver has a KITE login with this email (e.g. as a Viewer on this account), they can sign off themselves. Otherwise the KT lead records their sign-off with evidence.</p>
+    </fieldset>
+
+    <fieldset class="checklist">
+      <legend>Internal KT team</legend>
+      <p class="hint">People in our team who must complete internal KT for this project after the receivers get it from the client.</p>
+      {% for u in people %}
+      <label class="inline"><input type="checkbox" name="team" value="{{ u.id }}" {% if u.id in form.team_ids %}checked{% endif %}> {{ u.full_name }} <span class="muted">({{ u.role_label }})</span></label>
+      {% else %}
+      <p class="muted">No members in this account yet.</p>
+      {% endfor %}
+      {% if errors.team %}<p class="error">{{ errors.team }}</p>{% endif %}
+    </fieldset>
+
+    <button type="submit">{{ "Save project" if project else "Add project" }}</button>
+    <a href="{{ url_for('projects.project', code=account.code, project_id=project.id) if project else url_for('main.account_detail', code=account.code) }}">Cancel</a>
+  </form>
+</section>
+{% endblock %}

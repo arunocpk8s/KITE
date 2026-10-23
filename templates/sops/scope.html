@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Scope of work · {{ account.code }} · {{ app_name }}{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('main.account_detail', code=account.code) }}">&larr; {{ account.name }}</a></p>
+<h1>Scope of work <span class="muted">· {{ account.name }} ({{ account.code }})</span></h1>
+
+<section class="card">
+  <h2>Contract</h2>
+  <dl class="details">
+    <dt>Contract</dt><dd>{% if account.contract_start or account.contract_end %}{{ account.contract_start | date or "?" }} – {{ account.contract_end | date or "?" }}
+      {% if account.contract_end and account.contract_end < today %}<span class="badge-breached">Ended</span>{% endif %}{% else %}—{% endif %}</dd>
+    <dt>Statement of work</dt><dd>{% if account.scope_link %}<a href="{{ account.scope_link }}" target="_blank" rel="noopener noreferrer">Open the signed SOW</a>{% else %}—{% endif %}</dd>
+  </dl>
+  {% if can_manage %}
+  <details>
+    <summary>Edit contract details</summary>
+    <form method="post" action="{{ url_for('sops.scope_details', code=account.code) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="row">
+        <div><label for="contract_start">Contract start</label><input id="contract_start" name="contract_start" type="date" value="{{ account.contract_start or '' }}"></div>
+        <div><label for="contract_end">Contract end</label><input id="contract_end" name="contract_end" type="date" value="{{ account.contract_end or '' }}"></div>
+      </div>
+      <label for="scope_link">Statement of work link (SharePoint)</label>
+      <input id="scope_link" name="scope_link" value="{{ account.scope_link }}" maxlength="500" placeholder="https://...">
+      <button type="submit" class="small">Save</button>
+    </form>
+  </details>
+  {% endif %}
+</section>
+
+{% for kind, label, items in grouped %}
+<section class="card" id="{{ kind }}">
+  <h2>{{ label }}</h2>
+  {% if items %}
+  <ul class="plain-list">
+    {% for i in items %}
+    <li><strong>{{ i.title }}</strong>{% if i.detail %}<br><span class="description">{{ i.detail }}</span>{% endif %}
+      {% if can_manage %}
+      <details>
+        <summary>Edit</summary>
+        <form method="post" action="{{ url_for('sops.edit_scope_item', code=account.code, item_id=i.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="kind" value="{{ i.kind }}">
+          <label for="t-{{ i.id }}">Item</label><input id="t-{{ i.id }}" name="title" value="{{ i.title }}" maxlength="300">
+          <label for="d-{{ i.id }}">Details</label><textarea id="d-{{ i.id }}" name="detail" rows="2" maxlength="4000">{{ i.detail }}</textarea>
+          <button type="submit" class="small">Save</button>
+        </form>
+        <form method="post" action="{{ url_for('sops.delete_scope_item', code=account.code, item_id=i.id) }}" data-confirm="Remove this item?">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="link-button">Remove</button>
+        </form>
+      </details>
+      {% endif %}</li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">Nothing recorded yet.</p>
+  {% endif %}
+  {% if can_manage %}
+  <details>
+    <summary>Add to {{ label | lower }}</summary>
+    <form method="post" action="{{ url_for('sops.add_scope_item', code=account.code) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="kind" value="{{ kind }}">
+      <label for="new-t-{{ kind }}">{% if kind == 'SLA' %}Service level (e.g. "P1 incidents: respond in 30 min, resolve in 4 h"){% elif kind == 'RESPONSIBILITY' %}Activity and who is R/A/C/I{% elif kind == 'CONTACT' %}Name and role{% else %}Service{% endif %}</label>
+      <input id="new-t-{{ kind }}" name="title" maxlength="300">
+      <label for="new-d-{{ kind }}">Details (optional)</label>
+      <textarea id="new-d-{{ kind }}" name="detail" rows="2" maxlength="4000"></textarea>
+      <button type="submit" class="small">Add</button>
+    </form>
+  </details>
+  {% endif %}
+</section>
+{% endfor %}
+{% endblock %}

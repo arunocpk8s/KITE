@@ -12,8 +12,11 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 import notify
 from admin import bp as admin_bp
+import sops
 from kt import bp as kt_bp
 from kt import my_kt, plan_stats, visible_account_or_404
+from projects import account_projects
+from projects import bp as projects_bp
 from auth import bp as auth_bp
 from auth import login_required
 from config import DEPARTMENTS, Config
@@ -68,6 +71,8 @@ def create_app(test_config=None):
     app.register_blueprint(bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(kt_bp)
+    app.register_blueprint(projects_bp)
+    app.register_blueprint(sops.bp)
     app.jinja_env.filters["ist"] = format_ist
     app.jinja_env.filters["date"] = format_date
 
@@ -93,6 +98,7 @@ def create_app(test_config=None):
         }
 
     register_cli(app)
+    sops.register_cli(app)
     return app
 
 
@@ -218,7 +224,8 @@ def account_detail(code):
     account = visible_account_or_404(code)
     return render_template(
         "account_detail.html", account=account, members=account.member_users().all(),
-        can_manage=g.user.can_manage(account), stats=plan_stats(account),
+        can_manage=g.user.can_manage(account), stats=plan_stats(account), projects=account_projects(account),
+        sop_stats=sops.sop_stats(account),
     )
 
 

@@ -141,3 +141,27 @@ button.link-button:hover { background: none; }
 details summary { cursor: pointer; color: var(--primary); }
 .add-session { margin-top: 12px; }
 @media (max-width: 900px) { .topic-layout { grid-template-columns: 1fr; } }
+
+/* Projects, SOPs and scope of work */
+.button-secondary { background: #fff; color: var(--primary); border: 1px solid var(--primary); }
+.button-secondary:hover { background: var(--primary-soft); }
+h3 { font-size: 1rem; margin: 0.8rem 0 0.4rem; }
+.module-head h3 { margin: 0; }
+.project-block { margin-bottom: 20px; }
+.project-head { margin: 8px 0; padding-bottom: 4px; border-bottom: 2px solid var(--primary-soft); }
+.project-head h2 { margin: 0; }
+.stage, .sop-status { display: inline-block; padding: 1px 9px; border-radius: 10px; font-size: 0.8rem; font-weight: 600; background: #eef0f2; color: #52606d; vertical-align: middle; }
+.stage-KT_IN_PROGRESS, .stage-CHECKLIST { background: var(--primary-soft); color: var(--primary-dark); }
+.stage-READY_FOR_SIGN_OFF, .stage-INTERNAL_KT, .sop-IN_REVIEW { background: var(--accent-soft); color: #8a4b00; }
+.stage-COMPLETE, .sop-APPROVED { background: #e3f6e8; color: #1e6b34; }
+.sop-RETIRED, .sop-SUPERSEDED { background: #f3f4f6; color: #7b8794; }
+.steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; list-style: none; padding: 0; margin: 0 0 16px; }
+.steps li { background: #fff; border: 1px solid #e4e7eb; border-left: 4px solid #cbd2d9; border-radius: 6px; padding: 8px 10px; font-size: 0.9rem; }
+.steps li.step-done { border-left-color: #2f9e55; }
+.tick { color: #1e6b34; font-weight: 700; }
+.pending { color: #9aa5b1; }
+form.inline { display: inline; }
+.inline-form.wide { margin-top: 10px; }
+.inline-form.wide input { width: auto; flex: 1; }
+.doc-type { display: inline-block; margin-left: 6px; padding: 0 7px; border-radius: 8px; background: #eef0f2; font-size: 0.78rem; color: #52606d; }
+@media (max-width: 760px) { .steps { grid-template-columns: 1fr 1fr; } }

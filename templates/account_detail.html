@@ -14,7 +14,39 @@
   <div class="tile"><span class="tile-value">{{ members | length }}</span><span class="tile-label">Members</span></div>
 </section>
 <p><a class="button" href="{{ url_for('kt.plan', code=account.code) }}">Open the KT plan</a>
-  <span class="muted">SOPs, transactions and newcomer onboarding arrive in the next phases.</span></p>
+  <a class="button button-secondary" href="{{ url_for('sops.sop_list', code=account.code) }}">SOPs ({{ sop_stats.total }}{% if sop_stats.review_overdue %}, {{ sop_stats.review_overdue }} review overdue{% endif %})</a>
+  <a class="button button-secondary" href="{{ url_for('sops.scope', code=account.code) }}">Scope of work</a>
+  <span class="muted">Transactions and newcomer onboarding arrive in the next phases.</span></p>
+
+<section class="card">
+  <div class="module-head">
+    <h2>Projects</h2>
+    {% if can_manage %}<a class="push-right" href="{{ url_for('projects.new_project', code=account.code) }}">Add project</a>{% endif %}
+  </div>
+  {% if projects %}
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Project</th><th>Stage</th><th>KT signed off</th><th>Checklist</th><th>Client sign-off</th><th>Internal KT</th><th>Target</th></tr></thead>
+    <tbody>
+      {% for p, s in projects %}
+      <tr>
+        <td><a href="{{ url_for('projects.project', code=account.code, project_id=p.id) }}">{{ p.name }}</a></td>
+        <td><span class="stage stage-{{ s.stage }}">{{ s.stage_label }}</span></td>
+        <td><span class="progress progress-wide" title="{{ s.progress }}%"><span style="width: {{ s.progress }}%"></span></span> {{ s.signed_off }}/{{ s.topics }}</td>
+        <td>{{ s.checklist_done }}/{{ s.checklist_total }}</td>
+        <td>{% if p.client_signed %}{{ p.client_signed_at | ist }}{% else %}<span class="muted">Not yet</span>{% endif %}</td>
+        <td>{% if s.team_total %}{{ s.team_done }}/{{ s.team_total }}{% else %}<span class="muted">No team set</span>{% endif %}</td>
+        <td>{{ p.target_date | date or "—" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <p class="muted">No projects yet.{% if can_manage %} Each project has its own KT plan, hand-over checklist, client sign-off, internal KT and SharePoint documents.
+    <a href="{{ url_for('projects.new_project', code=account.code) }}">Add the first project</a>.{% endif %}</p>
+  {% endif %}
+</section>
 
 <section class="card">
   <h2>Team</h2>

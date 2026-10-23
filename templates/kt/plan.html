@@ -14,6 +14,12 @@
 </section>
 
 <form class="filters" method="get" action="{{ url_for('kt.plan', code=account.code) }}">
+  <label>Project
+    <select name="project">
+      <option value="">All projects</option>
+      {% for p in projects %}<option value="{{ p.id }}" {% if filters.project == p.id|string %}selected{% endif %}>{{ p.name }}</option>{% endfor %}
+    </select>
+  </label>
   <label>Status
     <select name="status">
       <option value="">All</option>
@@ -32,19 +38,28 @@
   <a href="{{ url_for('kt.plan', code=account.code) }}">Clear</a>
   <a class="push-right" href="{{ url_for('kt.export', code=account.code) }}">Export CSV</a>
   {% if can_manage %}
-  <a class="button" href="{{ url_for('kt.new_module', code=account.code) }}">Add module</a>
+  <a class="button" href="{{ url_for('projects.new_project', code=account.code) }}">Add project</a>
   {% endif %}
 </form>
 
-{% for module, topics, progress in sections %}
+{% for project, modules in sections %}
+<div class="project-block" id="project-{{ project.id }}">
+<div class="module-head project-head">
+  <h2><a href="{{ url_for('projects.project', code=account.code, project_id=project.id) }}">{{ project.name }}</a></h2>
+  {% if project.client_signed %}<span class="stage stage-COMPLETE">Client signed off</span>{% endif %}
+  {% if can_manage and not project.client_signed %}
+  <span class="push-right"><a href="{{ url_for('kt.new_module', code=account.code, project=project.id) }}">Add module</a></span>
+  {% endif %}
+</div>
+{% for module, topics, progress in modules %}
 <section class="card" id="module-{{ module.id }}">
   <div class="module-head">
-    <h2>{{ module.title }}</h2>
+    <h3>{{ module.title }}</h3>
     <span class="progress progress-wide" title="{{ progress }}% signed off"><span style="width: {{ progress }}%"></span></span>
     <span class="muted">{{ progress }}%</span>
     {% if can_manage %}
     <span class="push-right">
-      <a href="{{ url_for('kt.new_topic', code=account.code, module=module.id) }}">Add topic</a> ·
+      {% if not project.client_signed %}<a href="{{ url_for('kt.new_topic', code=account.code, module=module.id) }}">Add topic</a> ·{% endif %}
       <a href="{{ url_for('kt.edit_module', code=account.code, module_id=module.id) }}">Edit module</a>
     </span>
     {% endif %}
@@ -53,13 +68,13 @@
   {% if topics %}
   <div class="table-wrap">
   <table>
-    <thead><tr><th>Topic</th><th>SME</th><th>Receivers</th><th>Planned</th><th>Target sign-off</th><th>Status</th><th>Understanding</th></tr></thead>
+    <thead><tr><th>Topic</th><th>SME</th><th>Receivers confirmed</th><th>Planned</th><th>Target sign-off</th><th>Status</th><th>Understanding</th></tr></thead>
     <tbody>
       {% for t in topics %}
       <tr>
         <td><a href="{{ url_for('kt.topic', code=account.code, topic_id=t.id) }}">{{ t.title }}</a></td>
         <td>{{ t.sme.full_name if t.sme else "—" }}</td>
-        <td>{{ t.receivers | length }}</td>
+        <td>{{ t.receivers | length - t.unconfirmed_receivers | length }}/{{ t.receivers | length }}</td>
         <td>{{ t.planned_date | date or "—" }}</td>
         <td {% if t.is_overdue(today) %}class="overdue"{% endif %}>{{ t.due_date | date or "—" }}{% if t.is_overdue(today) %} (overdue){% endif %}</td>
         <td><span class="kt-status kt-{{ t.status }}">{{ t.status_label }}</span></td>
@@ -72,15 +87,20 @@
   {% elif module.topics %}
   <p class="muted">No topics match the filter.</p>
   {% else %}
-  <p class="muted">No topics yet.{% if can_manage %} <a href="{{ url_for('kt.new_topic', code=account.code, module=module.id) }}">Add the first topic</a>.{% endif %}</p>
+  <p class="muted">No topics yet.{% if can_manage and not project.client_signed %} <a href="{{ url_for('kt.new_topic', code=account.code, module=module.id) }}">Add the first topic</a>.{% endif %}</p>
   {% endif %}
 </section>
+{% else %}
+<section class="card"><p class="muted">No modules in this project yet.{% if can_manage and not project.client_signed %}
+  <a href="{{ url_for('kt.new_module', code=account.code, project=project.id) }}">Add the first module</a>.{% endif %}</p></section>
+{% endfor %}
+</div>
 {% else %}
 <section class="card">
   <p>No KT plan yet.</p>
   {% if can_manage %}
-  <p class="muted">Start with a module (an area of the client's work, e.g. "Billing" or "Month-end close"), then add its topics.</p>
-  <p><a class="button" href="{{ url_for('kt.new_module', code=account.code) }}">Add the first module</a></p>
+  <p class="muted">Start with a project (a piece of the client's work your team is taking over), then add its modules (areas such as "Billing" or "Month-end close") and their topics.</p>
+  <p><a class="button" href="{{ url_for('projects.new_project', code=account.code) }}">Add the first project</a></p>
   {% else %}
   <p class="muted">The KT lead for this account has not planned any KT yet.</p>
   {% endif %}

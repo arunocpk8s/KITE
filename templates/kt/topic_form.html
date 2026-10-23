@@ -20,7 +20,7 @@
         <label for="module_id">Module</label>
         <select id="module_id" name="module_id" {% if not manager %}disabled{% endif %}>
           <option value="">Choose…</option>
-          {% for m in modules %}<option value="{{ m.id }}" {% if form.module_id == m.id|string %}selected{% endif %}>{{ m.title }}</option>{% endfor %}
+          {% for m in modules %}<option value="{{ m.id }}" {% if form.module_id == m.id|string %}selected{% endif %}>{{ m.project.name ~ " · " if m.project }}{{ m.title }}</option>{% endfor %}
         </select>
         {% if errors.module_id %}<p class="error">{{ errors.module_id }}</p>{% endif %}
       </div>

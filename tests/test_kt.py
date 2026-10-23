@@ -5,7 +5,7 @@ import pytest
 
 from conftest import account_id, login, user_id
 from models import (
-    KTEvent, KTModule, KTRating, KTReceiver, KTSession, KTTopic, User, add_kt_event, db, kt_can_move,
+    KTEvent, KTModule, KTProject, KTRating, KTReceiver, KTSession, KTTopic, User, add_kt_event, db, kt_can_move,
 )
 from timeutil import ist_today
 
@@ -20,12 +20,33 @@ def sent(monkeypatch):
     return messages
 
 
-def make_module(app, title="Billing", code="ACME"):
+def make_project(app, code="ACME", name="Main"):
+    """The account's project called `name`, created if needed. Returns its id."""
     with app.app_context():
-        module = KTModule(account_id=account_id(code), title=title)
+        project = KTProject.query.filter_by(account_id=account_id(code), name=name).first()
+        if project is None:
+            project = KTProject(account_id=account_id(code), name=name)
+            db.session.add(project)
+            db.session.commit()
+        return project.id
+
+
+def make_module(app, title="Billing", code="ACME", project=None):
+    project = project or make_project(app, code)
+    with app.app_context():
+        module = KTModule(account_id=account_id(code), project_id=project, title=title)
         db.session.add(module)
         db.session.commit()
         return module.id
+
+
+def confirm_all(app, topic_id):
+    """Every receiver confirms they received the topic's KT."""
+    from timeutil import utcnow
+    with app.app_context():
+        for r in db.session.get(KTTopic, topic_id).receivers:
+            r.confirmed_at = utcnow()
+        db.session.commit()
 
 
 def make_topic(app, module_id, title="Credit notes", status="PLANNED", sme="sme", receivers=("mem1",),
@@ -87,24 +108,25 @@ def test_topic_of_another_account_is_404(app, client):
 
 def test_empty_plan_guides_the_kt_lead(client):
     login(client, "lead")
-    assert b"Add the first module" in client.get(BASE).data
+    assert b"Add the first project" in client.get(BASE).data
     client.get("/logout")
     login(client, "mem1")
     page = client.get(BASE).data
-    assert b"has not planned any KT yet" in page and b"Add module" not in page
+    assert b"has not planned any KT yet" in page and b"Add project" not in page
 
 
 # --- planning (KT lead and admin only) -----------------------------------------------------------
 def test_only_managers_plan(app, client):
     mid = make_module(app)
+    pid = make_project(app)
     for username in ("sme", "mem1", "viewer"):
         login(client, username)
-        assert client.post(f"{BASE}/modules/new", data={"title": "X"}).status_code == 403
+        assert client.post(f"{BASE}/modules/new", data={"title": "X", "project_id": pid}).status_code == 403
         assert client.post(f"{BASE}/topics/new", data=topic_form(app, mid)).status_code == 403
         assert client.get(f"{BASE}/modules/{mid}/edit").status_code == 403
         client.get("/logout")
     login(client, "admin")
-    assert client.post(f"{BASE}/modules/new", data={"title": "Admin module"}).status_code == 302
+    assert client.post(f"{BASE}/modules/new", data={"title": "Admin module", "project_id": pid}).status_code == 302
 
 
 def test_kt_lead_of_another_account_cannot_plan_here(app, client):
@@ -112,19 +134,23 @@ def test_kt_lead_of_another_account_cannot_plan_here(app, client):
         from models import AccountMember
         db.session.add(AccountMember(account_id=account_id("BETA"), user_id=user_id("lead")))
         db.session.commit()
+    pid = make_project(app, "BETA")
     login(client, "lead")
-    assert client.post("/accounts/BETA/kt/modules/new", data={"title": "Mine"}).status_code == 302
+    assert client.post("/accounts/BETA/kt/modules/new", data={"title": "Mine", "project_id": pid}).status_code == 302
     with app.app_context():
         from models import AccountMember
         AccountMember.query.filter_by(account_id=account_id("BETA"), user_id=user_id("lead")).delete()
         db.session.commit()
-    assert client.post("/accounts/BETA/kt/modules/new", data={"title": "Mine"}).status_code == 404
+    assert client.post("/accounts/BETA/kt/modules/new", data={"title": "Mine", "project_id": pid}).status_code == 404
 
 
 def test_create_module_and_topic(app, client, sent):
     login(client, "lead")
     assert client.get(f"{BASE}/topics/new").status_code == 302  # no module yet: sent to add one
-    client.post(f"{BASE}/modules/new", data={"title": "  Month   end ", "description": "Closing the books"})
+    assert "/projects/new" in client.get(f"{BASE}/modules/new").headers["Location"]  # no project yet either
+    pid = make_project(app)
+    client.post(f"{BASE}/modules/new", data={"title": "  Month   end ", "description": "Closing the books",
+                                             "project_id": pid})
     with app.app_context():
         module = KTModule.query.one()
         assert (module.title, module.account.code) == ("Month end", "ACME")
@@ -223,9 +249,18 @@ def test_full_lifecycle_with_sessions_and_sign_off(app, client, sent):
 
     client.post(f"{BASE}/topics/{tid}/status", data={"status": "REVERSE_KT"})
     assert topic_status(app, tid) == "REVERSE_KT"
-    # The SME cannot sign off; the KT lead can.
+    # The SME cannot sign off; the KT lead can, once every receiver has confirmed.
     assert client.post(f"{BASE}/topics/{tid}/status", data={"status": "SIGNED_OFF"}).status_code == 403
     client.get("/logout")
+    login(client, "lead")
+    client.post(f"{BASE}/topics/{tid}/status", data={"status": "SIGNED_OFF"})
+    assert topic_status(app, tid) == "REVERSE_KT"  # nobody has confirmed yet
+    client.get("/logout")
+    for name in ("mem1", "viewer"):
+        login(client, name)
+        assert client.post(f"{BASE}/topics/{tid}/confirm", data={"note": "Got it"}).status_code == 302
+        client.get("/logout")
+    assert "All receivers confirmed" in sent[-1][1] and sent[-1][0] == ["lead@example.com"]
     login(client, "lead")
     client.post(f"{BASE}/topics/{tid}/status", data={"status": "SIGNED_OFF", "comment": "Reverse KT went well"})
     with app.app_context():
@@ -233,8 +268,9 @@ def test_full_lifecycle_with_sessions_and_sign_off(app, client, sent):
         assert topic.status == "SIGNED_OFF" and topic.signed_off_by.username == "lead" and topic.signed_off_at
         assert [e.event_type for e in topic.events] == [
             "CREATED", "SESSION_SCHEDULED", "STATUS_CHANGED", "SESSION_HELD", "STATUS_CHANGED", "STATUS_CHANGED",
-            "STATUS_CHANGED"]
-    assert "signed off" in sent[-1][1].lower()
+            "RECEIPT_CONFIRMED", "RECEIPT_CONFIRMED", "STATUS_CHANGED"]
+    assert "KT signed off: Credit notes" in sent[-2][1]
+    assert "Ready for client sign-off" in sent[-1][1]  # the project's only topic, and no checklist items
     # Reopen clears the sign-off.
     client.post(f"{BASE}/topics/{tid}/status", data={"status": "DELIVERED"})
     with app.app_context():
@@ -356,7 +392,7 @@ def test_export_csv(app, client):
     resp = client.get(f"{BASE}/export.csv")
     assert resp.status_code == 200 and resp.mimetype == "text/csv"
     text = resp.data.decode("utf-8-sig")
-    assert text.splitlines()[0].startswith("Module,Topic,Status,SME")
+    assert text.splitlines()[0].startswith("Project,Module,Topic,Status,SME")
     assert '"Credit notes, part 1"' in text and "20 Nov 2026" in text
 
 

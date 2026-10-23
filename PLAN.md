@@ -54,7 +54,18 @@ accounts** and sees only those accounts (FAXORA's team scoping, reused).
 - **SOPs:** title, purpose, steps, owner, version, `DRAFT → IN_REVIEW → APPROVED → RETIRED`, review
   date, version history, linked transactions. Review-due reminders.
 
-### 2.5 Added (suggested)
+### 2.5 Projects (added in phase 3)
+- **Account → projects → modules → topics.** Each project has its own KT plan.
+- **Receiver confirmation:** every receiver on our side confirms a topic's KT; sign-off waits for all.
+- **Hand-over checklist** per project (standard items, editable), ticked with note and evidence link.
+- **Client sign-off** once all topics are signed off and the checklist is complete: by the client
+  approver in KITE (login with the approver email), or recorded by the KT lead with evidence. Locks
+  the project's KT plan; revocable with a reason.
+- **Internal KT:** after the client's KT, receivers hold internal sessions for the project's internal
+  KT team; each member confirms. Client sign-off + internal KT = project complete.
+- **KT documents:** SharePoint KT folder link and a register of document links per project.
+
+### 2.6 Added (suggested)
 - **Account dashboard:** KT % complete, overdue topics, newcomers and readiness, SOPs due for review,
   unacknowledged changes.
 - **Search** across topics, SOPs, transactions and the glossary.
@@ -83,7 +94,8 @@ accounts** and sees only those accounts (FAXORA's team scoping, reused).
 `kt_sessions`, `kt_attendance`, `kt_ratings`, `kt_events` (history); `learning_paths`,
 `path_items`, `onboarding` (newcomer, path, buddy, target), `onboarding_progress`, `comments`;
 `transactions`, `transition_phases`, `exit_criteria`, `changes`, `change_acks`; `scope_items`,
-`sops`, `sop_versions`; `glossary`; plus `email_outbox`, `settings`, `admin_events` from FAXORA.
+`sops`, `sop_versions`, `sop_events`; `kt_projects`, `project_checklist`, `project_team`,
+`internal_kt_sessions`, `project_documents`, `project_events`; `glossary`; plus `email_outbox`, `settings`, `admin_events` from FAXORA.
 
 ## 5. Build phases
 
@@ -92,7 +104,7 @@ accounts** and sees only those accounts (FAXORA's team scoping, reused).
 | 0 | Copy from FAXORA, fresh git repo, name KITE | **Done** (174 copied tests pass) |
 | 1 | Rebrand; remove SOS/facility parts; client accounts and roles | **Done** (76 tests pass) |
 | 2 | KT tracker: modules, topics, workflow, sessions, ratings, dashboard | **Done** (96 tests pass) |
-| 3 | Scope of work and SOPs with versions, approval and review dates | SOP approved and versioned |
+| 3 | Scope of work and SOPs with versions, approval and review dates; plus projects (below) | **Done** (117 tests pass) |
 | 4 | Transaction catalogue and change log with acknowledgements | Change published and acknowledged |
 | 5 | Transition phases and exit criteria with sign-off | Phase signed off |
 | 6 | Newcomer learning paths, progress, Q&A, readiness | Newcomer reaches *ready* |

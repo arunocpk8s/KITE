@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}{{ "Edit " ~ sop.code if sop else "Add SOP" }} · {{ account.code }} · {{ app_name }}{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('sops.sop', code=account.code, sop_id=sop.id) if sop else url_for('sops.sop_list', code=account.code) }}">&larr;
+  {{ sop.code ~ " " ~ sop.title if sop else "SOPs · " ~ account.name }}</a></p>
+
+<section class="card">
+  <h2>{% if not sop %}Add an SOP{% elif sop.working_version %}Edit draft version {{ sop.working_version.number }}{% else %}Start version {{ sop.versions[-1].number + 1 }}{% endif %}</h2>
+  {% if sop and not sop.working_version %}<p class="hint">Version {{ sop.approved_version.number }} stays in force until the new version is approved.</p>{% endif %}
+  <form method="post" action="{{ url_for('sops.edit_sop', code=account.code, sop_id=sop.id) if sop else url_for('sops.new_sop', code=account.code) }}" novalidate>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="row">
+      <div>
+        <label for="title">Title</label>
+        <input id="title" name="title" value="{{ form.title }}" maxlength="200" placeholder="e.g. Month-end accrual posting" required autofocus>
+        {% if errors.title %}<p class="error">{{ errors.title }}</p>{% endif %}
+      </div>
+      <div>
+        <label for="project_id">Project (optional)</label>
+        <select id="project_id" name="project_id">
+          <option value="">Whole account</option>
+          {% for p in projects %}<option value="{{ p.id }}" {% if form.project_id == p.id|string %}selected{% endif %}>{{ p.name }}</option>{% endfor %}
+        </select>
+        {% if errors.project_id %}<p class="error">{{ errors.project_id }}</p>{% endif %}
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label for="owner_id">Owner</label>
+        <select id="owner_id" name="owner_id" {% if not manager %}disabled{% endif %}>
+          <option value="">Choose…</option>
+          {% for u in owners %}<option value="{{ u.id }}" {% if form.owner_id == u.id|string %}selected{% endif %}>{{ u.full_name }} ({{ u.role_label }})</option>{% endfor %}
+        </select>
+        {% if errors.owner_id %}<p class="error">{{ errors.owner_id }}</p>{% endif %}
+      </div>
+      <div>
+        <label for="review_months">Review every (months)</label>
+        <input id="review_months" name="review_months" type="number" min="1" max="36" value="{{ form.review_months }}">
+        {% if errors.review_months %}<p class="error">{{ errors.review_months }}</p>{% endif %}
+      </div>
+    </div>
+    <label for="purpose">Purpose</label>
+    <textarea id="purpose" name="purpose" rows="3" maxlength="4000" required>{{ form.purpose }}</textarea>
+    {% if errors.purpose %}<p class="error">{{ errors.purpose }}</p>{% endif %}
+    <label for="steps">Steps</label>
+    <textarea id="steps" name="steps" rows="12" maxlength="20000" placeholder="1. ...&#10;2. ...">{{ form.steps }}</textarea>
+    {% if errors.steps %}<p class="error">{{ errors.steps }}</p>{% endif %}
+    <label for="link">SOP document in SharePoint (optional)</label>
+    <input id="link" name="link" value="{{ form.link }}" maxlength="500" placeholder="https://yourcompany.sharepoint.com/...">
+    {% if errors.link %}<p class="error">{{ errors.link }}</p>{% endif %}
+    <label for="change_note">What changed in this version{% if not sop or sop.working_version %} (optional){% endif %}</label>
+    <textarea id="change_note" name="change_note" rows="2" maxlength="2000">{{ form.change_note }}</textarea>
+    {% if errors.change_note %}<p class="error">{{ errors.change_note }}</p>{% endif %}
+    <button type="submit">Save draft</button>
+    <a href="{{ url_for('sops.sop', code=account.code, sop_id=sop.id) if sop else url_for('sops.sop_list', code=account.code) }}">Cancel</a>
+  </form>
+</section>
+{% endblock %}

@@ -1,7 +1,8 @@
 {% extends "base.html" %}
 {% block title %}{{ topic.title }} · {{ account.code }} · {{ app_name }}{% endblock %}
 {% block content %}
-<p><a href="{{ url_for('kt.plan', code=account.code) }}#module-{{ topic.module_id }}">&larr; KT plan · {{ account.name }}</a></p>
+<p><a href="{{ url_for('kt.plan', code=account.code) }}#module-{{ topic.module_id }}">&larr; KT plan · {{ account.name }}</a>
+  · <a href="{{ url_for('projects.project', code=account.code, project_id=topic.module.project_id) }}">Project: {{ topic.module.project.name }}</a></p>
 <h1>{{ topic.title }} <span class="kt-status kt-{{ topic.status }}">{{ topic.status_label }}</span>
   {% if topic.is_overdue(today) %}<span class="badge-breached">Overdue</span>{% endif %}</h1>
 
@@ -9,6 +10,7 @@
 <div>
   <section class="card">
     <dl class="details">
+      <dt>Project</dt><dd>{{ topic.module.project.name }}</dd>
       <dt>Module</dt><dd>{{ topic.module.title }}</dd>
       <dt>SME</dt><dd>{{ topic.sme.full_name if topic.sme else "Not assigned yet" }}</dd>
       <dt>Receivers</dt><dd>{{ topic.receiver_users | map(attribute='full_name') | join(', ') or "None yet" }}</dd>
@@ -90,6 +92,31 @@
     {% endif %}
   </section>
 
+  <section class="card" id="receivers">
+    <h2>Receiver confirmation</h2>
+    {% if topic.receivers %}
+    <p class="muted">Each receiver on our side confirms they have received this KT. The KT lead signs it off once everyone has confirmed.</p>
+    <ul class="plain-list">
+      {% for r in topic.receivers | sort(attribute='user.full_name') %}
+      <li>{% if r.confirmed_at %}<span class="tick">&#10003;</span> <strong>{{ r.user.full_name }}</strong> confirmed {{ r.confirmed_at | ist }}{% if r.confirm_note %} · <span class="description">{{ r.confirm_note }}</span>{% endif %}
+        {% else %}<span class="pending">&#9675;</span> {{ r.user.full_name }} <span class="muted">· not confirmed yet</span>{% endif %}</li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="muted">No receivers yet.</p>
+    {% endif %}
+    {% if my_receipt and can_confirm %}
+    <form method="post" action="{{ url_for('kt.confirm_receipt', code=account.code, topic_id=topic.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label for="confirm-note">Note (optional)</label>
+      <input id="confirm-note" name="note" maxlength="2000" value="{{ my_receipt.confirm_note }}" placeholder="e.g. Received; walkthrough recording watched">
+      <button type="submit">{{ "Update my confirmation" if my_receipt.confirmed_at else "I confirm I have received this KT" }}</button>
+    </form>
+    {% elif my_receipt and not my_receipt.confirmed_at and topic.is_open %}
+    <p class="hint">You can confirm once the KT has been delivered.</p>
+    {% endif %}
+  </section>
+
   <section class="card" id="understanding">
     <h2>Understanding</h2>
     {% if topic.ratings %}
@@ -136,6 +163,7 @@
       <button type="submit">Update</button>
     </form>
     <p class="hint">Scheduling a session moves a planned topic to Scheduled; marking it held moves it to Delivered.
+      Sign-off needs every receiver's confirmation.
       {% if not can_manage %}Only the KT lead can sign off or cancel.{% endif %}</p>
   </section>
   {% endif %}
@@ -151,6 +179,7 @@
         {% elif e.event_type == "SESSION_SCHEDULED" %}scheduled a session for {{ e.new_value }}
         {% elif e.event_type == "SESSION_HELD" %}recorded the session of {{ e.new_value }} as held
         {% elif e.event_type == "RATED" %}rated their understanding {{ e.new_value }}/5
+        {% elif e.event_type == "RECEIPT_CONFIRMED" %}confirmed they received the KT
         {% else %}updated the topic{% endif %}
         {% if e.comment %}<br><span class="description">{{ e.comment }}</span>{% endif %}</li>
       {% endfor %}

@@ -1,4 +1,4 @@
-"""Database models: User, Account, AccountMember, EmailOutbox, Setting and AdminEvent."""
+"""Database models: users and client accounts; KT plan, projects and SOPs; scope of work; email, settings, logs."""
 import sqlalchemy as sa
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import event
@@ -74,6 +74,10 @@ class User(db.Model):
         """Admins, and KT leads who are members of the account."""
         return self.is_admin or (self.role == "kt_lead" and self.can_view(account))
 
+    def can_contribute(self, account):
+        """Everyone in the account except viewers (ticks checklists, adds documents)."""
+        return self.role != "viewer" and self.can_view(account)
+
 
 class Account(db.Model):
     """A client account (customer engagement). All KT content belongs to one account."""
@@ -86,6 +90,10 @@ class Account(db.Model):
     description = db.Column(db.Text, nullable=False, default="")
     active = db.Column(db.Boolean, nullable=False, default=True)
     created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    # Scope of work: contract dates and the link to the signed statement of work.
+    contract_start = db.Column(db.Date)
+    contract_end = db.Column(db.Date)
+    scope_link = db.Column(db.String(500), nullable=False, default="", server_default="")
 
     members = db.relationship("AccountMember", back_populates="account", cascade="all, delete-orphan",
                               order_by="AccountMember.id")
@@ -143,18 +151,21 @@ def kt_can_move(old, new):
 
 
 class KTModule(db.Model):
-    """A group of KT topics in an account's KT plan (e.g. 'Billing', 'Month-end close')."""
+    """A group of KT topics in a project's KT plan (e.g. 'Billing', 'Month-end close')."""
 
     __tablename__ = "kt_modules"
 
     id = db.Column(db.Integer, primary_key=True)
     account_id = db.Column(db.Integer, db.ForeignKey("accounts.id"), nullable=False, index=True)
+    # Nullable only for databases from before projects; upgrade_schema() fills it in.
+    project_id = db.Column(db.Integer, db.ForeignKey("kt_projects.id"), index=True)
     title = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text, nullable=False, default="")
     position = db.Column(db.Integer, nullable=False, default=0)
     created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
 
     account = db.relationship("Account")
+    project = db.relationship("KTProject", back_populates="modules")
     topics = db.relationship("KTTopic", back_populates="module", order_by="(KTTopic.position, KTTopic.id)")
 
 
@@ -208,6 +219,13 @@ class KTTopic(db.Model):
     def is_receiver(self, user):
         return any(r.user_id == user.id for r in self.receivers)
 
+    def receiver(self, user):
+        return next((r for r in self.receivers if r.user_id == user.id), None)
+
+    @property
+    def unconfirmed_receivers(self):
+        return sorted((r.user for r in self.receivers if r.confirmed_at is None), key=lambda u: u.full_name)
+
     @property
     def average_rating(self):
         scores = [r.score for r in self.ratings]
@@ -219,7 +237,7 @@ class KTTopic(db.Model):
 
 
 class KTReceiver(db.Model):
-    """A person who receives the KT for a topic."""
+    """A person on our side who receives the KT for a topic, and confirms once they have received it."""
 
     __tablename__ = "kt_receivers"
     __table_args__ = (db.UniqueConstraint("topic_id", "user_id", name="uq_kt_receiver"),)
@@ -227,6 +245,8 @@ class KTReceiver(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     topic_id = db.Column(db.Integer, db.ForeignKey("kt_topics.id"), nullable=False, index=True)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    confirmed_at = db.Column(db.DateTime)
+    confirm_note = db.Column(db.Text, nullable=False, default="", server_default="")
 
     topic = db.relationship("KTTopic", back_populates="receivers")
     user = db.relationship("User")
@@ -300,15 +320,333 @@ class KTEvent(db.Model):
     actor = db.relationship("User")
 
 
-@event.listens_for(KTEvent, "before_update")
-@event.listens_for(KTEvent, "before_delete")
-def _kt_events_are_append_only(mapper, connection, target):
-    raise RuntimeError("KTEvent rows are append-only")
-
-
 def add_kt_event(topic, actor, event_type, old_value=None, new_value=None, comment=None):
     db.session.add(KTEvent(topic=topic, actor_id=actor.id, event_type=event_type, old_value=old_value,
                            new_value=new_value, comment=comment, created_at=utcnow()))
+
+
+# --- Projects: KT checklist, client sign-off, internal KT and KT documents -----------------------
+# Checklist items every new project starts with; the KT lead can change them.
+DEFAULT_CHECKLIST = (
+    "Access to the client's systems and tools granted to the team",
+    "KT documents and recordings saved in the SharePoint KT folder",
+    "Runbooks and SOPs handed over",
+    "Contacts and escalation matrix shared",
+    "Open issues, backlog and known problems handed over",
+)
+DOC_TYPES = ("KT deck", "Recording", "Runbook", "SOP", "Process document", "Architecture", "Other")
+
+
+class KTProject(db.Model):
+    """A client project inside an account, with its own KT plan, checklist, client sign-off,
+    internal KT for the rest of our team, and a register of KT documents kept in SharePoint."""
+
+    __tablename__ = "kt_projects"
+
+    id = db.Column(db.Integer, primary_key=True)
+    account_id = db.Column(db.Integer, db.ForeignKey("accounts.id"), nullable=False, index=True)
+    name = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text, nullable=False, default="")
+    start_date = db.Column(db.Date)
+    target_date = db.Column(db.Date)
+    # The project's KT folder in SharePoint (or Teams files).
+    sharepoint_url = db.Column(db.String(500), nullable=False, default="")
+    # The client person who signs off the KT. With a KITE login on this email they can sign off themselves.
+    client_approver_name = db.Column(db.String(120), nullable=False, default="")
+    client_approver_email = db.Column(db.String(200), nullable=False, default="")
+    # Client sign-off: by the approver in KITE, or recorded by a KT lead with evidence.
+    client_signed_at = db.Column(db.DateTime)
+    client_signer_name = db.Column(db.String(120), nullable=False, default="")
+    client_signer_email = db.Column(db.String(200), nullable=False, default="")
+    client_signoff_evidence = db.Column(db.String(500), nullable=False, default="")
+    client_signoff_comment = db.Column(db.Text, nullable=False, default="")
+    client_signoff_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    client_signed_in_kite = db.Column(db.Boolean, nullable=False, default=False)
+    position = db.Column(db.Integer, nullable=False, default=0)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+
+    account = db.relationship("Account")
+    client_signoff_by = db.relationship("User", foreign_keys=[client_signoff_by_id])
+    modules = db.relationship("KTModule", back_populates="project", order_by="(KTModule.position, KTModule.id)")
+    checklist = db.relationship("ProjectChecklistItem", back_populates="project", cascade="all, delete-orphan",
+                                order_by="(ProjectChecklistItem.position, ProjectChecklistItem.id)")
+    team = db.relationship("ProjectTeamMember", back_populates="project", cascade="all, delete-orphan")
+    internal_sessions = db.relationship("InternalSession", back_populates="project", cascade="all, delete-orphan",
+                                        order_by="InternalSession.starts_at")
+    documents = db.relationship("ProjectDocument", back_populates="project", cascade="all, delete-orphan",
+                                order_by="(ProjectDocument.doc_type, ProjectDocument.title)")
+    events = db.relationship("ProjectEvent", back_populates="project", order_by="ProjectEvent.id",
+                             passive_deletes="all")
+
+    @property
+    def topics(self):
+        return [t for m in self.modules for t in m.topics]
+
+    @property
+    def client_signed(self):
+        return self.client_signed_at is not None
+
+    @property
+    def team_users(self):
+        return sorted((m.user for m in self.team), key=lambda u: u.full_name)
+
+    def team_member(self, user):
+        return next((m for m in self.team if m.user_id == user.id), None)
+
+    def is_client_approver(self, user):
+        email = self.client_approver_email.strip().lower()
+        return bool(email) and (user.email or "").strip().lower() == email
+
+
+class ProjectChecklistItem(db.Model):
+    __tablename__ = "project_checklist"
+
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.Integer, db.ForeignKey("kt_projects.id"), nullable=False, index=True)
+    title = db.Column(db.String(300), nullable=False)
+    position = db.Column(db.Integer, nullable=False, default=0)
+    done_at = db.Column(db.DateTime)
+    done_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    note = db.Column(db.Text, nullable=False, default="")
+    evidence_link = db.Column(db.String(500), nullable=False, default="")
+
+    project = db.relationship("KTProject", back_populates="checklist")
+    done_by = db.relationship("User")
+
+
+class ProjectTeamMember(db.Model):
+    """Someone in our team who must complete internal KT for the project (given by our receivers)."""
+
+    __tablename__ = "project_team"
+    __table_args__ = (db.UniqueConstraint("project_id", "user_id", name="uq_project_team"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.Integer, db.ForeignKey("kt_projects.id"), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    completed_at = db.Column(db.DateTime)
+    comment = db.Column(db.Text, nullable=False, default="")
+
+    project = db.relationship("KTProject", back_populates="team")
+    user = db.relationship("User")
+
+
+class InternalSession(db.Model):
+    """An internal KT session: our receivers pass the client's KT on to the rest of the team."""
+
+    __tablename__ = "internal_kt_sessions"
+
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.Integer, db.ForeignKey("kt_projects.id"), nullable=False, index=True)
+    starts_at = db.Column(db.DateTime, nullable=False)  # UTC
+    duration_minutes = db.Column(db.Integer, nullable=False, default=60)
+    presenter_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    agenda = db.Column(db.Text, nullable=False, default="")
+    meeting_link = db.Column(db.String(500), nullable=False, default="")
+    recording_link = db.Column(db.String(500), nullable=False, default="")
+    held = db.Column(db.Boolean, nullable=False, default=False)
+    created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+
+    project = db.relationship("KTProject", back_populates="internal_sessions")
+    presenter = db.relationship("User", foreign_keys=[presenter_id])
+
+
+class ProjectDocument(db.Model):
+    """A KT document kept in SharePoint; KITE stores the link, not the file."""
+
+    __tablename__ = "project_documents"
+
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.Integer, db.ForeignKey("kt_projects.id"), nullable=False, index=True)
+    title = db.Column(db.String(200), nullable=False)
+    doc_type = db.Column(db.String(40), nullable=False, default="Other")
+    url = db.Column(db.String(500), nullable=False)
+    topic_id = db.Column(db.Integer, db.ForeignKey("kt_topics.id"))
+    added_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    added_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+
+    project = db.relationship("KTProject", back_populates="documents")
+    topic = db.relationship("KTTopic")
+    added_by = db.relationship("User")
+
+    @property
+    def in_sharepoint(self):
+        parts = self.url.split("/")
+        return len(parts) > 2 and parts[2].lower().endswith(".sharepoint.com")
+
+
+class ProjectEvent(db.Model):
+    """Append-only history of a project (checklist, sign-off, internal KT, documents)."""
+
+    __tablename__ = "project_events"
+
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.Integer, db.ForeignKey("kt_projects.id"), nullable=False, index=True)
+    actor_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    event_type = db.Column(db.String(30), nullable=False)
+    detail = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+
+    project = db.relationship("KTProject", back_populates="events")
+    actor = db.relationship("User")
+
+
+def add_project_event(project, actor, event_type, detail=None):
+    db.session.add(ProjectEvent(project=project, actor_id=actor.id, event_type=event_type, detail=detail,
+                                created_at=utcnow()))
+
+
+# --- SOPs ----------------------------------------------------------------------------------------
+# A version moves DRAFT -> IN_REVIEW -> APPROVED; approving a newer version makes the previous one
+# SUPERSEDED. IN_REVIEW -> DRAFT sends it back. The SOP as a whole can be retired.
+SOP_VERSION_LABELS = {"DRAFT": "Draft", "IN_REVIEW": "In review", "APPROVED": "Approved",
+                      "SUPERSEDED": "Superseded"}
+SOP_STATUS_LABELS = {"DRAFT": "Draft", "IN_REVIEW": "In review", "APPROVED": "Approved", "RETIRED": "Retired"}
+DEFAULT_REVIEW_MONTHS = 12
+
+
+class Sop(db.Model):
+    __tablename__ = "sops"
+    __table_args__ = (db.UniqueConstraint("account_id", "number", name="uq_sop_number"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    account_id = db.Column(db.Integer, db.ForeignKey("accounts.id"), nullable=False, index=True)
+    project_id = db.Column(db.Integer, db.ForeignKey("kt_projects.id"), index=True)
+    number = db.Column(db.Integer, nullable=False)
+    title = db.Column(db.String(200), nullable=False)
+    owner_id = db.Column(db.Integer, db.ForeignKey("users.id"), index=True)
+    review_months = db.Column(db.Integer, nullable=False, default=DEFAULT_REVIEW_MONTHS)
+    # Set when a version is approved: the approval date plus review_months.
+    review_due = db.Column(db.Date)
+    retired_at = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+
+    account = db.relationship("Account")
+    project = db.relationship("KTProject")
+    owner = db.relationship("User")
+    versions = db.relationship("SopVersion", back_populates="sop", order_by="SopVersion.number",
+                               cascade="all, delete-orphan")
+    events = db.relationship("SopEvent", back_populates="sop", order_by="SopEvent.id", passive_deletes="all")
+
+    @property
+    def code(self):
+        return f"SOP-{self.number:03d}"
+
+    @property
+    def approved_version(self):
+        return next((v for v in reversed(self.versions) if v.status == "APPROVED"), None)
+
+    @property
+    def working_version(self):
+        """The newest version while it is still a draft or in review."""
+        latest = self.versions[-1] if self.versions else None
+        return latest if latest is not None and latest.status in ("DRAFT", "IN_REVIEW") else None
+
+    @property
+    def status(self):
+        if self.retired_at:
+            return "RETIRED"
+        if self.approved_version:
+            return "APPROVED"
+        return self.working_version.status if self.working_version else "DRAFT"
+
+    @property
+    def status_label(self):
+        return SOP_STATUS_LABELS[self.status]
+
+    def review_overdue(self, today):
+        return self.status == "APPROVED" and self.review_due is not None and today > self.review_due
+
+
+class SopVersion(db.Model):
+    __tablename__ = "sop_versions"
+    __table_args__ = (db.UniqueConstraint("sop_id", "number", name="uq_sop_version"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    sop_id = db.Column(db.Integer, db.ForeignKey("sops.id"), nullable=False, index=True)
+    number = db.Column(db.Integer, nullable=False)
+    purpose = db.Column(db.Text, nullable=False, default="")
+    steps = db.Column(db.Text, nullable=False, default="")
+    # The SOP document in SharePoint.
+    link = db.Column(db.String(500), nullable=False, default="")
+    change_note = db.Column(db.Text, nullable=False, default="")
+    status = db.Column(db.String(20), nullable=False, default="DRAFT")
+    created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    submitted_at = db.Column(db.DateTime)
+    submitted_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    approved_at = db.Column(db.DateTime)
+    approved_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+
+    sop = db.relationship("Sop", back_populates="versions")
+    created_by = db.relationship("User", foreign_keys=[created_by_id])
+    submitted_by = db.relationship("User", foreign_keys=[submitted_by_id])
+    approved_by = db.relationship("User", foreign_keys=[approved_by_id])
+
+    @property
+    def status_label(self):
+        return SOP_VERSION_LABELS[self.status]
+
+
+class SopEvent(db.Model):
+    """Append-only history of an SOP."""
+
+    __tablename__ = "sop_events"
+
+    id = db.Column(db.Integer, primary_key=True)
+    sop_id = db.Column(db.Integer, db.ForeignKey("sops.id"), nullable=False, index=True)
+    actor_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    event_type = db.Column(db.String(30), nullable=False)
+    version = db.Column(db.Integer)
+    comment = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+
+    sop = db.relationship("Sop", back_populates="events")
+    actor = db.relationship("User")
+
+
+def add_sop_event(sop, actor, event_type, version=None, comment=None):
+    db.session.add(SopEvent(sop=sop, actor_id=actor.id, event_type=event_type, version=version, comment=comment,
+                            created_at=utcnow()))
+
+
+# --- Scope of work -------------------------------------------------------------------------------
+SCOPE_KINDS = {
+    "IN_SCOPE": "In scope",
+    "OUT_OF_SCOPE": "Out of scope",
+    "SLA": "Service levels (SLAs)",
+    "RESPONSIBILITY": "Responsibilities (RACI)",
+    "CONTACT": "Contacts",
+}
+
+
+class ScopeItem(db.Model):
+    """One line of an account's scope of work: a service in or out of scope, an SLA, a responsibility or a contact."""
+
+    __tablename__ = "scope_items"
+
+    id = db.Column(db.Integer, primary_key=True)
+    account_id = db.Column(db.Integer, db.ForeignKey("accounts.id"), nullable=False, index=True)
+    kind = db.Column(db.String(20), nullable=False)
+    title = db.Column(db.String(300), nullable=False)
+    detail = db.Column(db.Text, nullable=False, default="")
+    position = db.Column(db.Integer, nullable=False, default=0)
+    updated_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    updated_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+
+    updated_by = db.relationship("User")
+
+
+@event.listens_for(KTEvent, "before_update")
+@event.listens_for(KTEvent, "before_delete")
+@event.listens_for(ProjectEvent, "before_update")
+@event.listens_for(ProjectEvent, "before_delete")
+@event.listens_for(SopEvent, "before_update")
+@event.listens_for(SopEvent, "before_delete")
+def _history_is_append_only(mapper, connection, target):
+    raise RuntimeError(f"{type(target).__name__} rows are append-only")
 
 
 class EmailOutbox(db.Model):
@@ -383,13 +721,18 @@ def add_admin_event(actor, action, target="", detail=None):
 
 
 # Columns added after the first release: (table, column, SQL definition). Applied at start-up.
-ADDED_COLUMNS = []
+ADDED_COLUMNS = [
+    ("accounts", "contract_start", "DATE"),
+    ("accounts", "contract_end", "DATE"),
+    ("accounts", "scope_link", "VARCHAR(500) NOT NULL DEFAULT ''"),
+    ("kt_modules", "project_id", "INTEGER REFERENCES kt_projects(id)"),
+    ("kt_receivers", "confirmed_at", "TIMESTAMP"),
+    ("kt_receivers", "confirm_note", "TEXT NOT NULL DEFAULT ''"),
+]
 
 
 def upgrade_schema():
     """Bring an existing database up to date with the current models (safe to run repeatedly)."""
-    if not ADDED_COLUMNS:
-        return
     tables = {t for t, _, _ in ADDED_COLUMNS}
     inspector = sa.inspect(db.engine)
     existing = {t: {c["name"] for c in inspector.get_columns(t)} for t in tables}
@@ -397,3 +740,14 @@ def upgrade_schema():
         for table, column, definition in ADDED_COLUMNS:
             if column not in existing[table]:
                 conn.execute(sa.text(f"ALTER TABLE {table} ADD COLUMN {column} {definition}"))
+    # Modules from before projects go into a "General" project of their account.
+    orphans = KTModule.query.filter(KTModule.project_id.is_(None)).all()
+    projects = {}
+    for module in orphans:
+        if module.account_id not in projects:
+            projects[module.account_id] = KTProject(account_id=module.account_id, name="General",
+                                                    description="KT planned before projects were added.")
+            db.session.add(projects[module.account_id])
+        module.project = projects[module.account_id]
+    if orphans:
+        db.session.commit()

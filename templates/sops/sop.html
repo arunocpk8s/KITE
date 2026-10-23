@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block title %}{{ sop.code }} {{ sop.title }} · {{ account.code }} · {{ app_name }}{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('sops.sop_list', code=account.code) }}">&larr; SOPs · {{ account.name }}</a></p>
+<h1>{{ sop.code }} {{ sop.title }} <span class="sop-status sop-{{ sop.status }}">{{ sop.status_label }}</span>
+  {% if sop.review_overdue(today) %}<span class="badge-breached">Review overdue</span>{% endif %}</h1>
+
+<div class="topic-layout">
+<div>
+  {% if working and shown.id != working.id %}
+  <p class="flash">Version {{ working.number }} is {{ working.status_label | lower }}.
+    <a href="{{ url_for('sops.sop', code=account.code, sop_id=sop.id, v=working.number) }}">See the draft</a>.</p>
+  {% endif %}
+  <section class="card">
+    <div class="module-head">
+      <h2>Version {{ shown.number }}</h2>
+      <span class="sop-status sop-{{ shown.status }}">{{ shown.status_label }}</span>
+      {% if shown.approved_at %}<span class="muted">approved {{ shown.approved_at | ist }} by {{ shown.approved_by.full_name }}</span>{% endif %}
+    </div>
+    <h3>Purpose</h3>
+    <p class="description">{{ shown.purpose }}</p>
+    {% if shown.steps %}<h3>Steps</h3><p class="description">{{ shown.steps }}</p>{% endif %}
+    {% if shown.link %}<p><a class="button button-secondary" href="{{ shown.link }}" target="_blank" rel="noopener noreferrer">Open the SOP document</a></p>{% endif %}
+    {% if shown.change_note %}<p class="hint">What changed: {{ shown.change_note }}</p>{% endif %}
+  </section>
+
+  {% if working %}
+  <section class="card">
+    <h2>Version {{ working.number }}: {{ working.status_label }}</h2>
+    {% if working.status == "DRAFT" %}
+    <p class="muted">Last saved {{ working.updated_at | ist }} by {{ working.created_by.full_name }}.</p>
+    {% if can_edit %}
+    <p><a href="{{ url_for('sops.edit_sop', code=account.code, sop_id=sop.id) }}">Edit draft</a></p>
+    <form method="post" action="{{ url_for('sops.submit_sop', code=account.code, sop_id=sop.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit">Submit for review</button>
+    </form>
+    {% endif %}
+    {% else %}
+    <p class="muted">Submitted {{ working.submitted_at | ist }} by {{ working.submitted_by.full_name }}.</p>
+    {% if can_approve %}
+    <form method="post" action="{{ url_for('sops.approve_sop', code=account.code, sop_id=sop.id) }}" data-confirm="Approve version {{ working.number }}?">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label for="a-comment">Comment (optional)</label>
+      <input id="a-comment" name="comment" maxlength="2000">
+      <button type="submit">Approve version {{ working.number }}</button>
+    </form>
+    {% elif manager %}
+    <p class="hint">Another KT lead must approve a version you wrote.</p>
+    {% endif %}
+    {% if manager %}
+    <details>
+      <summary>Send back for changes</summary>
+      <form method="post" action="{{ url_for('sops.send_back_sop', code=account.code, sop_id=sop.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label for="sb-comment">What needs to change</label>
+        <textarea id="sb-comment" name="comment" rows="2" maxlength="2000" required></textarea>
+        <button type="submit" class="danger">Send back</button>
+      </form>
+    </details>
+    {% endif %}
+    {% endif %}
+  </section>
+  {% elif can_edit %}
+  <p><a class="button" href="{{ url_for('sops.edit_sop', code=account.code, sop_id=sop.id) }}">Change this SOP (starts version {{ sop.versions[-1].number + 1 }})</a></p>
+  {% endif %}
+</div>
+
+<div>
+  <section class="card">
+    <h2>Details</h2>
+    <dl class="details">
+      <dt>Owner</dt><dd>{{ sop.owner.full_name if sop.owner else "—" }}</dd>
+      <dt>Project</dt><dd>{% if sop.project %}<a href="{{ url_for('projects.project', code=account.code, project_id=sop.project_id) }}">{{ sop.project.name }}</a>{% else %}Whole account{% endif %}</dd>
+      <dt>Review every</dt><dd>{{ sop.review_months }} months</dd>
+      <dt>Next review</dt><dd {% if sop.review_overdue(today) %}class="overdue"{% endif %}>{{ sop.review_due | date or "After first approval" }}</dd>
+      {% if sop.retired_at %}<dt>Retired</dt><dd>{{ sop.retired_at | ist }}</dd>{% endif %}
+    </dl>
+    {% if manager and sop.status == "APPROVED" %}
+    <details>
+      <summary>Mark reviewed (no changes)</summary>
+      <form method="post" action="{{ url_for('sops.mark_reviewed', code=account.code, sop_id=sop.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label for="r-comment">Comment (optional)</label>
+        <input id="r-comment" name="comment" maxlength="2000">
+        <button type="submit" class="small">Reviewed: still correct</button>
+      </form>
+    </details>
+    {% endif %}
+    {% if manager and not sop.retired_at %}
+    <details>
+      <summary>Retire this SOP</summary>
+      <form method="post" action="{{ url_for('sops.retire_sop', code=account.code, sop_id=sop.id) }}" data-confirm="Retire {{ sop.code }}?">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label for="reason">Reason</label>
+        <textarea id="reason" name="reason" rows="2" maxlength="2000" required></textarea>
+        <button type="submit" class="danger">Retire</button>
+      </form>
+    </details>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <h2>Versions</h2>
+    <ul class="plain-list">
+      {% for v in sop.versions | reverse %}
+      <li>{% if v.id == shown.id %}<strong>v{{ v.number }}</strong>{% else %}<a href="{{ url_for('sops.sop', code=account.code, sop_id=sop.id, v=v.number) }}">v{{ v.number }}</a>{% endif %}
+        <span class="sop-status sop-{{ v.status }}">{{ v.status_label }}</span>
+        <span class="muted">{{ (v.approved_at or v.created_at) | ist }}</span>
+        {% if v.change_note %}<br><span class="description muted">{{ v.change_note }}</span>{% endif %}</li>
+      {% endfor %}
+    </ul>
+  </section>
+
+  <section class="card">
+    <h2>History</h2>
+    <ul class="history">
+      {% set labels = {"CREATED": "created the SOP", "EDITED": "edited the draft", "NEW_VERSION": "started a new version",
+        "SUBMITTED": "submitted it for review", "APPROVED": "approved it", "SENT_BACK": "sent it back for changes",
+        "REVIEWED": "reviewed it with no changes", "RETIRED": "retired the SOP"} %}
+      {% for e in sop.events | reverse %}
+      <li><span class="muted">{{ e.created_at | ist }}</span><br>
+        <strong>{{ e.actor.full_name }}</strong> {{ labels.get(e.event_type, "updated the SOP") }}{% if e.version %} (v{{ e.version }}){% endif %}
+        {% if e.comment %}<br><span class="description">{{ e.comment }}</span>{% endif %}</li>
+      {% endfor %}
+    </ul>
+  </section>
+</div>
+</div>
+{% endblock %}

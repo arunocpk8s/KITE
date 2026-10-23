@@ -1,0 +1,332 @@
+{% extends "base.html" %}
+{% block title %}{{ project.name }} · {{ account.code }} · {{ app_name }}{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('main.account_detail', code=account.code) }}">&larr; {{ account.name }}</a></p>
+<h1>{{ project.name }} <span class="stage stage-{{ state.stage }}">{{ state.stage_label }}</span></h1>
+{% if project.description %}<p class="description">{{ project.description }}</p>{% endif %}
+
+<ol class="steps">
+  {% set steps = [
+    ("KT from the client", state.kt_done, state.signed_off ~ "/" ~ state.topics ~ " topics signed off"),
+    ("Hand-over checklist", state.checklist_done == state.checklist_total, state.checklist_done ~ "/" ~ state.checklist_total ~ " complete"),
+    ("Client sign-off", project.client_signed, (project.client_signed_at | ist) if project.client_signed else "Not yet"),
+    ("Internal KT", project.client_signed and state.team_done == state.team_total, (state.team_done ~ "/" ~ state.team_total ~ " team members") if state.team_total else "No team set"),
+  ] %}
+  {% for title, done, detail in steps %}
+  <li class="{{ 'step-done' if done else '' }}"><strong>{{ loop.index }}. {{ title }}</strong><br><span class="muted">{{ detail }}</span></li>
+  {% endfor %}
+</ol>
+
+<div class="topic-layout">
+<div>
+  <section class="card" id="kt">
+    <div class="module-head">
+      <h2>KT plan</h2>
+      <span class="progress progress-wide" title="{{ state.progress }}% signed off"><span style="width: {{ state.progress }}%"></span></span>
+      <span class="muted">{{ state.progress }}%</span>
+      <span class="push-right"><a href="{{ url_for('kt.plan', code=account.code, project=project.id) }}">Open in KT plan</a>
+        {% if can_manage and not project.client_signed %} · <a href="{{ url_for('kt.new_module', code=account.code, project=project.id) }}">Add module</a>{% endif %}</span>
+    </div>
+    {% if project.topics %}
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th>Module</th><th>Topic</th><th>SME</th><th>Receivers confirmed</th><th>Status</th></tr></thead>
+      <tbody>
+        {% for m in project.modules %}{% for t in m.topics %}
+        <tr>
+          <td>{{ m.title }}</td>
+          <td><a href="{{ url_for('kt.topic', code=account.code, topic_id=t.id) }}">{{ t.title }}</a></td>
+          <td>{{ t.sme.full_name if t.sme else "—" }}</td>
+          <td {% if t.unconfirmed_receivers and t.status in ('DELIVERED', 'REVERSE_KT') %}class="overdue"{% endif %}>{{ t.receivers | length - t.unconfirmed_receivers | length }}/{{ t.receivers | length }}</td>
+          <td><span class="kt-status kt-{{ t.status }}">{{ t.status_label }}</span></td>
+        </tr>
+        {% endfor %}{% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+    <p class="muted">No KT topics yet.{% if can_manage %} Add a module, then its topics, from the KT plan.{% endif %}</p>
+    {% endif %}
+  </section>
+
+  <section class="card" id="checklist">
+    <h2>Hand-over checklist</h2>
+    {% if project.checklist %}
+    <ul class="plain-list checklist-items">
+      {% for item in project.checklist %}
+      <li>
+        {% if item.done_at %}
+        <span class="tick">&#10003;</span> <strong>{{ item.title }}</strong>
+        <br><span class="muted">Completed {{ item.done_at | ist }} by {{ item.done_by.full_name }}</span>
+        {% if item.note %} · <span class="description">{{ item.note }}</span>{% endif %}
+        {% if item.evidence_link %} · <a href="{{ item.evidence_link }}" target="_blank" rel="noopener noreferrer">Evidence</a>{% endif %}
+        {% if can_manage and not project.client_signed %}
+        <form class="inline" method="post" action="{{ url_for('projects.item_undo', code=account.code, project_id=project.id, item_id=item.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="link-button">Reopen</button>
+        </form>
+        {% endif %}
+        {% else %}
+        <span class="pending">&#9675;</span> {{ item.title }}
+        {% if can_contribute and not project.client_signed %}
+        <details>
+          <summary>Mark complete</summary>
+          <form method="post" action="{{ url_for('projects.item_done', code=account.code, project_id=project.id, item_id=item.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="row">
+              <div><label for="note-{{ item.id }}">Note (optional)</label><input id="note-{{ item.id }}" name="note" maxlength="2000"></div>
+              <div><label for="ev-{{ item.id }}">Evidence link (optional)</label><input id="ev-{{ item.id }}" name="evidence_link" placeholder="https://...sharepoint.com/..."></div>
+            </div>
+            <button type="submit" class="small">Mark complete</button>
+          </form>
+        </details>
+        {% endif %}
+        {% if can_manage and not project.client_signed %}
+        <form class="inline" method="post" action="{{ url_for('projects.delete_item', code=account.code, project_id=project.id, item_id=item.id) }}" data-confirm="Remove this checklist item?">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="link-button">Remove</button>
+        </form>
+        {% endif %}
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="muted">No checklist items.</p>
+    {% endif %}
+    {% if can_manage and not project.client_signed %}
+    <form class="inline-form wide" method="post" action="{{ url_for('projects.add_item', code=account.code, project_id=project.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input name="title" maxlength="300" placeholder="Add a checklist item" aria-label="New checklist item">
+      <button type="submit" class="small">Add</button>
+    </form>
+    {% endif %}
+  </section>
+
+  <section class="card" id="sign-off">
+    <h2>Client sign-off</h2>
+    {% if project.client_signed %}
+    <p><span class="tick">&#10003;</span> Signed off by <strong>{{ project.client_signer_name }}</strong>{% if project.client_signer_email %} ({{ project.client_signer_email }}){% endif %} on {{ project.client_signed_at | ist }}.</p>
+    <p class="muted">{% if project.client_signed_in_kite %}Signed off in KITE.{% else %}Recorded by {{ project.client_signoff_by.full_name }}.{% endif %}
+      {% if project.client_signoff_evidence %}<a href="{{ project.client_signoff_evidence }}" target="_blank" rel="noopener noreferrer">Evidence</a>{% endif %}</p>
+    {% if project.client_signoff_comment %}<p class="description">{{ project.client_signoff_comment }}</p>{% endif %}
+    {% if can_manage %}
+    <details>
+      <summary>Revoke sign-off</summary>
+      <form method="post" action="{{ url_for('projects.revoke_signoff', code=account.code, project_id=project.id) }}" data-confirm="Revoke the client's sign-off? The KT plan and checklist become editable again.">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label for="reason">Reason</label>
+        <textarea id="reason" name="reason" rows="2" maxlength="2000" required></textarea>
+        <button type="submit" class="danger">Revoke</button>
+      </form>
+    </details>
+    {% endif %}
+    {% elif not state.ready %}
+    <p class="muted">Sign-off opens when every KT topic is signed off ({{ state.signed_off }}/{{ state.topics }}) and the checklist is complete ({{ state.checklist_done }}/{{ state.checklist_total }}).</p>
+    {% if project.client_approver_name or project.client_approver_email %}<p>Client approver: {{ project.client_approver_name }} {% if project.client_approver_email %}<span class="muted">({{ project.client_approver_email }})</span>{% endif %}</p>{% endif %}
+    {% else %}
+    <p>Ready for sign-off. Client approver: <strong>{{ project.client_approver_name or "not set" }}</strong>{% if project.client_approver_email %} <span class="muted">({{ project.client_approver_email }})</span>{% endif %}</p>
+    {% if is_approver %}
+    <form method="post" action="{{ url_for('projects.sign_off', code=account.code, project_id=project.id) }}" data-confirm="Sign off the knowledge transfer for {{ project.name }}?">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label for="comment">Comment (optional)</label>
+      <textarea id="comment" name="comment" rows="2" maxlength="2000"></textarea>
+      <button type="submit">I sign off the KT for this project</button>
+    </form>
+    {% endif %}
+    {% if can_manage %}
+    {% if project.client_approver_email %}
+    <form method="post" action="{{ url_for('projects.request_signoff', code=account.code, project_id=project.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="small">Email the approver to request sign-off</button>
+    </form>
+    {% else %}
+    <p class="hint"><a href="{{ url_for('projects.edit_project', code=account.code, project_id=project.id) }}">Add the client approver's email</a> to request sign-off by email.</p>
+    {% endif %}
+    <details {% if not is_approver %}open{% endif %}>
+      <summary>Record the client's sign-off</summary>
+      <form method="post" action="{{ url_for('projects.sign_off', code=account.code, project_id=project.id) }}" novalidate>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="row">
+          <div><label for="signer_name">Client signer</label><input id="signer_name" name="signer_name" maxlength="120" value="{{ project.client_approver_name }}" required></div>
+          <div><label for="signer_email">Signer email</label><input id="signer_email" name="signer_email" type="email" maxlength="200" value="{{ project.client_approver_email }}"></div>
+        </div>
+        <label for="evidence_link">Evidence link</label>
+        <input id="evidence_link" name="evidence_link" maxlength="500" placeholder="https://...sharepoint.com/... (sign-off email or signed document)" required>
+        <label for="rec-comment">Comment (optional)</label>
+        <textarea id="rec-comment" name="comment" rows="2" maxlength="2000"></textarea>
+        <button type="submit">Record client sign-off</button>
+      </form>
+    </details>
+    {% endif %}
+    {% endif %}
+  </section>
+
+  <section class="card" id="internal">
+    <h2>Internal KT</h2>
+    <p class="muted">After the client's KT, our receivers pass it on to the rest of the team. Each team member confirms when they have completed it.</p>
+    {% if project.team %}
+    <ul class="plain-list">
+      {% for m in project.team | sort(attribute='user.full_name') %}
+      <li>{% if m.completed_at %}<span class="tick">&#10003;</span> <strong>{{ m.user.full_name }}</strong> completed {{ m.completed_at | ist }}{% if m.comment %} · <span class="description">{{ m.comment }}</span>{% endif %}
+        {% else %}<span class="pending">&#9675;</span> {{ m.user.full_name }} <span class="muted">· not completed yet</span>{% endif %}</li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="muted">No internal KT team set.{% if can_manage %} <a href="{{ url_for('projects.edit_project', code=account.code, project_id=project.id) }}">Choose the team</a>.{% endif %}</p>
+    {% endif %}
+
+    <h3>Internal sessions</h3>
+    {% if project.internal_sessions %}
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th>When</th><th>Presenter</th><th>Agenda</th><th>Links</th><th></th></tr></thead>
+      <tbody>
+        {% for s in project.internal_sessions %}
+        <tr>
+          <td>{{ s.starts_at | ist }}<br><span class="muted">{{ s.duration_minutes }} min</span></td>
+          <td>{{ s.presenter.full_name }}</td>
+          <td class="description">{{ s.agenda }}</td>
+          <td>{% if s.meeting_link %}<a href="{{ s.meeting_link }}" target="_blank" rel="noopener noreferrer">Meeting</a>{% endif %}
+            {% if s.recording_link %}{{ " · " if s.meeting_link }}<a href="{{ s.recording_link }}" target="_blank" rel="noopener noreferrer">Recording</a>{% endif %}</td>
+          <td>{% if s.held %}<span class="tick">&#10003;</span> Held
+            {% elif can_run_internal %}
+            <details>
+              <summary>Mark as held</summary>
+              <form method="post" action="{{ url_for('projects.internal_session_held', code=account.code, project_id=project.id, session_id=s.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <label for="irec-{{ s.id }}">Recording link (optional)</label>
+                <input id="irec-{{ s.id }}" name="recording_link" placeholder="https://...">
+                <button type="submit" class="small">Save</button>
+              </form>
+            </details>
+            {% else %}<span class="muted">Not held yet</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+    <p class="muted">No internal sessions yet.</p>
+    {% endif %}
+    {% if can_run_internal %}
+    <details class="add-session">
+      <summary>Schedule an internal session</summary>
+      <form method="post" action="{{ url_for('projects.add_internal_session', code=account.code, project_id=project.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="row">
+          <div class="row">
+            <div><label for="i-date">Date</label><input id="i-date" name="date" type="date" required></div>
+            <div><label for="i-time">Time (IST)</label><input id="i-time" name="time" type="time" required></div>
+          </div>
+          <div class="row">
+            <div><label for="i-duration">Minutes</label><input id="i-duration" name="duration" type="number" min="15" max="480" step="15" value="60"></div>
+            <div><label for="i-presenter">Presenter</label>
+              <select id="i-presenter" name="presenter_id">
+                {% for u in presenters %}<option value="{{ u.id }}" {% if u.id == g.user.id %}selected{% endif %}>{{ u.full_name }}</option>{% endfor %}
+              </select></div>
+          </div>
+        </div>
+        <label for="i-link">Meeting link</label>
+        <input id="i-link" name="meeting_link" placeholder="https://teams.microsoft.com/...">
+        <label for="i-agenda">Agenda (topics covered)</label>
+        <textarea id="i-agenda" name="agenda" rows="2" maxlength="2000"></textarea>
+        <button type="submit">Schedule and email the team</button>
+      </form>
+    </details>
+    {% endif %}
+
+    {% if me_on_team %}
+    <form method="post" action="{{ url_for('projects.complete_internal', code=account.code, project_id=project.id) }}" class="rating-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <p><strong>{{ "You completed internal KT on " ~ (me_on_team.completed_at | ist) ~ "." if me_on_team.completed_at else "Have you completed the internal KT for this project?" }}</strong></p>
+      <label for="i-comment">Comment or open questions (optional)</label>
+      <textarea id="i-comment" name="comment" rows="2" maxlength="2000">{{ me_on_team.comment }}</textarea>
+      <button type="submit">{{ "Update" if me_on_team.completed_at else "I have completed internal KT" }}</button>
+    </form>
+    {% endif %}
+  </section>
+</div>
+
+<div>
+  <section class="card">
+    <h2>Details</h2>
+    <dl class="details">
+      <dt>KT start</dt><dd>{{ project.start_date | date or "—" }}</dd>
+      <dt>Target</dt><dd>{{ project.target_date | date or "—" }}</dd>
+      <dt>Client approver</dt><dd>{{ project.client_approver_name or "—" }}{% if project.client_approver_email %}<br><span class="muted">{{ project.client_approver_email }}</span>{% endif %}</dd>
+      <dt>Internal KT team</dt><dd>{{ project.team_users | map(attribute='full_name') | join(', ') or "—" }}</dd>
+    </dl>
+    {% if can_manage %}<p><a href="{{ url_for('projects.edit_project', code=account.code, project_id=project.id) }}">Edit project</a></p>{% endif %}
+  </section>
+
+  <section class="card" id="documents">
+    <h2>KT documents</h2>
+    {% if project.sharepoint_url %}
+    <p><a class="button button-secondary" href="{{ project.sharepoint_url }}" target="_blank" rel="noopener noreferrer">Open the SharePoint KT folder</a></p>
+    {% elif can_manage %}
+    <p class="hint"><a href="{{ url_for('projects.edit_project', code=account.code, project_id=project.id) }}">Add the SharePoint KT folder link</a> so everyone finds the documents in one place.</p>
+    {% endif %}
+    {% if project.documents %}
+    <ul class="plain-list">
+      {% for d in project.documents %}
+      <li><a href="{{ d.url }}" target="_blank" rel="noopener noreferrer">{{ d.title }}</a>
+        <span class="doc-type">{{ d.doc_type }}</span>{% if d.in_sharepoint %} <span class="muted">SharePoint</span>{% endif %}
+        {% if d.topic %}<br><span class="muted">Topic: <a href="{{ url_for('kt.topic', code=account.code, topic_id=d.topic_id) }}">{{ d.topic.title }}</a></span>{% endif %}
+        {% if can_manage or d.added_by_id == g.user.id and can_contribute %}
+        <form class="inline" method="post" action="{{ url_for('projects.delete_document', code=account.code, project_id=project.id, doc_id=d.id) }}" data-confirm="Remove '{{ d.title }}' from the register? The file stays in SharePoint.">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="link-button">Remove</button>
+        </form>
+        {% endif %}</li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="muted">No documents registered yet.</p>
+    {% endif %}
+    {% if can_contribute %}
+    <details {% if not project.documents %}open{% endif %}>
+      <summary>Add a document link</summary>
+      <form method="post" action="{{ url_for('projects.add_document', code=account.code, project_id=project.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label for="d-title">Title</label>
+        <input id="d-title" name="title" maxlength="200" required>
+        <label for="d-url">SharePoint link</label>
+        <input id="d-url" name="url" maxlength="500" placeholder="https://yourcompany.sharepoint.com/..." required>
+        <label for="d-type">Type</label>
+        <select id="d-type" name="doc_type">{% for t in doc_types %}<option>{{ t }}</option>{% endfor %}</select>
+        <label for="d-topic">KT topic (optional)</label>
+        <select id="d-topic" name="topic_id">
+          <option value="">—</option>
+          {% for t in project.topics %}<option value="{{ t.id }}">{{ t.title }}</option>{% endfor %}
+        </select>
+        <p class="hint">In SharePoint use Share or Copy link and paste it here.</p>
+        <button type="submit" class="small">Add document</button>
+      </form>
+    </details>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <h2>History</h2>
+    <ul class="history">
+      {% for e in project.events | reverse %}
+      <li><span class="muted">{{ e.created_at | ist }}</span><br>
+        <strong>{{ e.actor.full_name }}</strong>
+        {% set labels = {
+          "CREATED": "added the project", "UPDATED": "updated the project",
+          "CHECKLIST_ADDED": "added a checklist item", "CHECKLIST_DONE": "completed a checklist item",
+          "CHECKLIST_REOPENED": "reopened a checklist item", "CHECKLIST_REMOVED": "removed a checklist item",
+          "SIGN_OFF_REQUESTED": "requested client sign-off from", "CLIENT_SIGNED_OFF": "recorded the client sign-off",
+          "SIGN_OFF_REVOKED": "revoked the client sign-off", "INTERNAL_SCHEDULED": "scheduled an internal session",
+          "INTERNAL_HELD": "recorded an internal session as held", "INTERNAL_COMPLETED": "completed internal KT",
+          "DOCUMENT_ADDED": "added a document", "DOCUMENT_REMOVED": "removed a document",
+        } %}
+        {{ labels.get(e.event_type, "updated the project") }}
+        {% if e.detail %}<br><span class="description">{{ e.detail }}</span>{% endif %}</li>
+      {% endfor %}
+    </ul>
+  </section>
+</div>
+</div>
+{% endblock %}

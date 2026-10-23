@@ -2,6 +2,7 @@
 
 All datetimes are stored as naive UTC. They are shown to users in Asia/Kolkata (UTC+05:30).
 """
+import calendar
 from datetime import datetime, timedelta, timezone
 
 # India has no daylight saving, so a fixed offset is exact for Asia/Kolkata.
@@ -99,3 +100,11 @@ def recent_months(count=12, now=None):
         year, month = (year, month - 1) if month > 1 else (year - 1, 12)
     return months
 
+
+
+def add_months(d, months):
+    """The same day `months` later (the month's last day if it is shorter)."""
+    month = d.month - 1 + months
+    year, month = d.year + month // 12, month % 12 + 1
+    days = calendar.monthrange(year, month)[1]
+    return d.replace(year=year, month=month, day=min(d.day, days))

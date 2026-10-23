@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}SOPs · {{ account.code }} · {{ app_name }}{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('main.account_detail', code=account.code) }}">&larr; {{ account.name }}</a></p>
+<h1>SOPs <span class="muted">· {{ account.name }} ({{ account.code }})</span></h1>
+
+<section class="tiles">
+  <div class="tile"><span class="tile-value">{{ stats.total }}</span><span class="tile-label">SOPs in use</span></div>
+  <div class="tile"><span class="tile-value">{{ stats.approved }}</span><span class="tile-label">Approved</span></div>
+  <a class="tile tile-link" href="{{ url_for('sops.sop_list', code=account.code, status='IN_REVIEW') }}"><span class="tile-value">{{ stats.in_review }}</span><span class="tile-label">Waiting for review</span></a>
+  <a class="tile tile-link {% if stats.review_overdue %}tile-alert{% endif %}" href="{{ url_for('sops.sop_list', code=account.code, status='REVIEW_DUE') }}"><span class="tile-value">{{ stats.review_overdue }}</span><span class="tile-label">Review overdue</span></a>
+</section>
+
+<form class="filters" method="get" action="{{ url_for('sops.sop_list', code=account.code) }}">
+  <label>Show
+    <select name="status">
+      <option value="">In use (not retired)</option>
+      <option value="REVIEW_DUE" {% if status == 'REVIEW_DUE' %}selected{% endif %}>Review due within {{ soon }} days or overdue</option>
+      {% for s, label in labels.items() %}<option value="{{ s }}" {% if status == s %}selected{% endif %}>{{ label }}</option>{% endfor %}
+      <option value="ALL" {% if status == 'ALL' %}selected{% endif %}>All, including retired</option>
+    </select>
+  </label>
+  <button type="submit">Filter</button>
+  {% if can_author %}<a class="button push-right" href="{{ url_for('sops.new_sop', code=account.code) }}">Add SOP</a>{% endif %}
+</form>
+
+<section class="card">
+  {% if sops %}
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>SOP</th><th>Title</th><th>Project</th><th>Owner</th><th>Status</th><th>Version</th><th>Next review</th></tr></thead>
+    <tbody>
+      {% for s in sops %}
+      <tr {% if s.status == 'RETIRED' %}class="inactive-row"{% endif %}>
+        <td>{{ s.code }}</td>
+        <td><a href="{{ url_for('sops.sop', code=account.code, sop_id=s.id) }}">{{ s.title }}</a></td>
+        <td>{{ s.project.name if s.project else "—" }}</td>
+        <td>{{ s.owner.full_name if s.owner else "—" }}</td>
+        <td><span class="sop-status sop-{{ s.status }}">{{ s.status_label }}</span>
+          {% if s.status == 'APPROVED' and s.working_version %}<br><span class="muted">v{{ s.working_version.number }} {{ s.working_version.status_label | lower }}</span>{% endif %}</td>
+        <td>{% if s.approved_version %}v{{ s.approved_version.number }}{% else %}v{{ s.versions[-1].number }}{% endif %}</td>
+        <td {% if s.review_overdue(today) %}class="overdue"{% endif %}>{{ s.review_due | date or "—" }}{% if s.review_overdue(today) %} (overdue){% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <p class="muted">No SOPs to show.{% if can_author and not status %} <a href="{{ url_for('sops.new_sop', code=account.code) }}">Add the first SOP</a>.{% endif %}</p>
+  {% endif %}
+</section>
+{% endblock %}

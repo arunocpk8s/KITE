@@ -7,6 +7,12 @@
   <h2>{{ "Edit module" if module else "Add a module" }}</h2>
   <form method="post" action="{{ url_for('kt.edit_module', code=account.code, module_id=module.id) if module else url_for('kt.new_module', code=account.code) }}" novalidate>
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label for="project_id">Project</label>
+    <select id="project_id" name="project_id" required>
+      <option value="">Choose…</option>
+      {% for p in projects %}<option value="{{ p.id }}" {% if form.project_id == p.id|string %}selected{% endif %}>{{ p.name }}{% if p.client_signed %} (client signed off){% endif %}</option>{% endfor %}
+    </select>
+    {% if errors.project_id %}<p class="error">{{ errors.project_id }}</p>{% endif %}
     <label for="title">Module title</label>
     <input id="title" name="title" value="{{ form.title }}" maxlength="200" placeholder="e.g. Billing and invoicing" required autofocus>
     {% if errors.title %}<p class="error">{{ errors.title }}</p>{% endif %}

@@ -16,6 +16,7 @@
     {% if g.user %}
     <nav>
       <a href="{{ url_for('main.dashboard') }}">My accounts</a>
+      <a href="{{ url_for('reports.overview') }}">Reports</a>
       {% if g.user.is_admin %}
       <a href="{{ url_for('admin.overview') }}">Admin console</a>
       {% endif %}

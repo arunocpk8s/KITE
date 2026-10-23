@@ -13,14 +13,18 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 import notify
 from admin import bp as admin_bp
 import sops
+from doubts import bp as doubts_bp
 from kt import bp as kt_bp
 from kt import my_kt, plan_stats, visible_account_or_404
 from projects import account_projects
 from projects import bp as projects_bp
+from nextsteps import next_steps, upcoming_internal_sessions
+from reports import bp as reports_bp
+from transactions import bp as transactions_bp
 from auth import bp as auth_bp
 from auth import login_required
 from config import DEPARTMENTS, Config
-from models import ROLE_LABELS, ROLES, Account, AccountMember, User, db, upgrade_schema
+from models import ROLE_LABELS, ROLES, Account, AccountMember, Change, Question, Transaction, User, db, upgrade_schema
 from timeutil import format_date, format_ist
 
 MIN_PASSWORD_LENGTH = 8
@@ -73,6 +77,9 @@ def create_app(test_config=None):
     app.register_blueprint(kt_bp)
     app.register_blueprint(projects_bp)
     app.register_blueprint(sops.bp)
+    app.register_blueprint(transactions_bp)
+    app.register_blueprint(doubts_bp)
+    app.register_blueprint(reports_bp)
     app.jinja_env.filters["ist"] = format_ist
     app.jinja_env.filters["date"] = format_date
 
@@ -215,7 +222,8 @@ def dashboard():
     accounts = g.user.visible_accounts().all()
     topics, upcoming = my_kt(g.user)
     return render_template("dashboard.html", accounts=[(a, plan_stats(a)) for a in accounts],
-                           my_topics=topics, upcoming=upcoming)
+                           my_topics=topics, upcoming=upcoming, steps=next_steps(g.user),
+                           internal=upcoming_internal_sessions(g.user))
 
 
 @bp.route("/accounts/<code>")
@@ -225,8 +233,16 @@ def account_detail(code):
     return render_template(
         "account_detail.html", account=account, members=account.member_users().all(),
         can_manage=g.user.can_manage(account), stats=plan_stats(account), projects=account_projects(account),
-        sop_stats=sops.sop_stats(account),
+        sop_stats=sops.sop_stats(account), phase4=account_counts(account),
     )
+
+
+def account_counts(account):
+    return {
+        "transactions": Transaction.query.filter_by(account_id=account.id, active=True).count(),
+        "changes": Change.query.filter_by(account_id=account.id, status="PUBLISHED").count(),
+        "open_doubts": Question.query.filter(Question.account_id == account.id, Question.status != "RESOLVED").count(),
+    }
 
 
 def safe_create_app():

@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}{{ question.code }} · {{ account.code }} · {{ app_name }}{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('doubts.doubt_list', code=account.code) }}">&larr; Doubts · {{ account.name }}</a></p>
+<h1>{{ question.code }} {{ question.title }} <span class="q-status q-{{ question.status }}">{{ question.status_label }}</span>
+  {% if question.blocking and question.is_open %}<span class="badge-breached">Blocking</span>{% endif %}</h1>
+
+<div class="topic-layout">
+<div>
+  <section class="card">
+    <p class="muted">Raised by <strong>{{ question.asked_by.full_name }}</strong> on {{ question.created_at | ist }}</p>
+    {% if question.detail %}<p class="description">{{ question.detail }}</p>{% endif %}
+  </section>
+
+  <section class="card" id="replies">
+    <h2>Replies</h2>
+    {% for r in question.replies %}
+    <div class="reply {{ 'reply-asker' if r.author_id == question.asked_by_id else 'reply-answer' }}">
+      <p class="muted"><strong>{{ r.author.full_name }}</strong> · {{ r.created_at | ist }}</p>
+      <p class="description">{{ r.body }}</p>
+    </div>
+    {% else %}
+    <p class="muted">No replies yet.</p>
+    {% endfor %}
+    {% if can_reply %}
+    <form method="post" action="{{ url_for('doubts.reply', code=account.code, question_id=question.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label for="body">{{ "Add a follow-up" if question.asked_by_id == g.user.id else "Your answer" }}</label>
+      <textarea id="body" name="body" rows="4" maxlength="8000" required></textarea>
+      <button type="submit">Post</button>
+    </form>
+    {% endif %}
+  </section>
+</div>
+<div>
+  <section class="card">
+    <h2>Details</h2>
+    <dl class="details">
+      <dt>Assigned to</dt><dd>{{ question.assigned_to.full_name if question.assigned_to else "Not assigned" }}</dd>
+      <dt>Project</dt><dd>{% if question.project %}<a href="{{ url_for('projects.project', code=account.code, project_id=question.project_id) }}">{{ question.project.name }}</a>{% else %}—{% endif %}</dd>
+      <dt>KT topic</dt><dd>{% if question.topic %}<a href="{{ url_for('kt.topic', code=account.code, topic_id=question.topic_id) }}">{{ question.topic.title }}</a>{% else %}—{% endif %}</dd>
+      <dt>Transaction</dt><dd>{% if question.transaction %}<a href="{{ url_for('transactions.transaction', code=account.code, txn_id=question.transaction_id) }}">{{ question.transaction.code }}</a>{% else %}—{% endif %}</dd>
+      {% if question.resolved_at %}<dt>Resolved</dt><dd>{{ question.resolved_at | ist }}</dd>{% endif %}
+    </dl>
+    {% if can_resolve %}
+    <form method="post" action="{{ url_for('doubts.resolve', code=account.code, question_id=question.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      {% if question.is_open %}
+      <button type="submit">I can move on: mark resolved</button>
+      {% else %}
+      <input type="hidden" name="reopen" value="1">
+      <button type="submit" class="small">Reopen</button>
+      {% endif %}
+    </form>
+    {% endif %}
+    {% if can_assign and question.is_open %}
+    <form method="post" action="{{ url_for('doubts.assign', code=account.code, question_id=question.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label for="assign">Assign to</label>
+      <select id="assign" name="assigned_to_id">
+        {% for u in answerers %}<option value="{{ u.id }}" {% if question.assigned_to_id == u.id %}selected{% endif %}>{{ u.full_name }}</option>{% endfor %}
+      </select>
+      <button type="submit" class="small">Assign</button>
+    </form>
+    {% endif %}
+  </section>
+</div>
+</div>
+{% endblock %}

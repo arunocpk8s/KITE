@@ -1,21 +1,52 @@
 {% extends "base.html" %}
 {% block title %}My accounts · {{ app_name }}{% endblock %}
 {% block content %}
-{% if my_topics or upcoming %}
-<section class="card">
-  <h2>My KT</h2>
-  {% if upcoming %}
-  <p class="muted">Next sessions</p>
+<h1 class="greeting">Hello, {{ g.user.full_name.split(' ')[0] }}</h1>
+
+<div class="home-grid">
+<section class="card card-soft card-steps">
+  <h2>My next steps {% if steps %}<span class="tab-count">{{ steps | length }}</span>{% endif %}</h2>
+  {% if steps %}
+  <ul class="steps-list">
+    {% for s in steps[:15] %}
+    <li class="{{ 'step-urgent' if s.urgent }}" style="--i: {{ loop.index0 }}">
+      <a href="{{ s.url }}">{{ s.text }}</a> <span class="account-chip">{{ s.account }}</span>
+      {% if s.urgent %}<span class="badge-breached">Urgent</span>{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% if steps | length > 15 %}<p class="hint">and {{ steps | length - 15 }} more.</p>{% endif %}
+  {% else %}
+  <p class="muted">Nothing is waiting on you. Stuck on something? Raise a doubt from your account's page and an SME will answer it.</p>
+  {% endif %}
+</section>
+
+<section class="card card-soft card-sessions">
+  <h2>Coming up</h2>
+  {% if upcoming or internal %}
   <ul class="plain-list">
     {% for s in upcoming %}
-    <li><strong>{{ s.starts_at | ist }}</strong> ·
+    <li><strong>{{ s.starts_at | ist }}</strong> · KT ·
       <a href="{{ url_for('kt.topic', code=s.topic.account.code, topic_id=s.topic.id) }}">{{ s.topic.title }}</a>
-      <span class="muted">({{ s.topic.account.code }})</span>
+      <span class="account-chip">{{ s.topic.account.code }}</span>
+      {% if s.meeting_link %} · <a href="{{ s.meeting_link }}" target="_blank" rel="noopener noreferrer">Join</a>{% endif %}</li>
+    {% endfor %}
+    {% for s in internal %}
+    <li><strong>{{ s.starts_at | ist }}</strong> · Internal KT ·
+      <a href="{{ url_for('projects.project', code=s.project.account.code, project_id=s.project_id) }}#internal">{{ s.project.name }}</a>
+      <span class="account-chip">{{ s.project.account.code }}</span> <span class="muted">by {{ s.presenter.full_name }}</span>
       {% if s.meeting_link %} · <a href="{{ s.meeting_link }}" target="_blank" rel="noopener noreferrer">Join</a>{% endif %}</li>
     {% endfor %}
   </ul>
+  {% else %}
+  <p class="muted">No sessions scheduled for you.</p>
   {% endif %}
-  {% if my_topics %}
+</section>
+</div>
+
+{% if my_topics %}
+<section class="card">
+  <h2>My KT topics</h2>
   <div class="table-wrap">
   <table>
     <thead><tr><th>Topic</th><th>Account</th><th>My part</th><th>Status</th><th>Target sign-off</th></tr></thead>
@@ -32,20 +63,19 @@
     </tbody>
   </table>
   </div>
-  {% endif %}
 </section>
 {% endif %}
 
-<h1>My accounts</h1>
+<h2 class="section-title">My accounts</h2>
 {% if accounts %}
 <section class="account-grid">
   {% for a, stats in accounts %}
-  <a class="account-card" href="{{ url_for('main.account_detail', code=a.code) }}">
+  <a class="account-card account-tint-{{ loop.index0 % 4 }}" href="{{ url_for('main.account_detail', code=a.code) }}" style="--i: {{ loop.index0 }}">
     <span class="account-code">{{ a.code }}</span>
     <span class="account-name">{{ a.name }}</span>
     {% if a.description %}<span class="muted account-desc">{{ a.description | truncate(140) }}</span>{% endif %}
     {% if stats.total %}
-    <span class="progress" title="{{ stats.progress }}% of KT topics signed off"><span style="width: {{ stats.progress }}%"></span></span>
+    <span class="progress progress-animated" title="{{ stats.progress }}% of KT topics signed off"><span style="width: {{ stats.progress }}%"></span></span>
     <span class="muted">KT {{ stats.signed_off }}/{{ stats.total }} signed off{% if stats.overdue %} · <span class="overdue">{{ stats.overdue }} overdue</span>{% endif %}</span>
     {% else %}
     <span class="muted">No KT topics yet · {{ a.members | length }} member{{ "" if a.members | length == 1 else "s" }}</span>

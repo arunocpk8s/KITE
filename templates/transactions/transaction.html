@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}{{ txn.code }} · {{ account.code }} · {{ app_name }}{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('transactions.catalogue', code=account.code) }}">&larr; Transactions · {{ account.name }}</a></p>
+<h1>{{ txn.code }} <span class="muted">{{ txn.name }}</span> <span class="crit crit-{{ txn.criticality }}">{{ txn.criticality }}</span>
+  {% if not txn.active %}<span class="badge-breached">Retired</span>{% endif %}</h1>
+
+<div class="topic-layout">
+<div>
+  <section class="card">
+    <h2>Purpose</h2>
+    <p class="description">{{ txn.purpose }}</p>
+    {% if txn.steps %}<h2>Steps</h2><p class="description">{{ txn.steps }}</p>{% endif %}
+    {% if txn.link %}<p><a class="button button-secondary" href="{{ txn.link }}" target="_blank" rel="noopener noreferrer">Open the document</a></p>{% endif %}
+    {% if can_edit %}<p><a href="{{ url_for('transactions.edit_transaction', code=account.code, txn_id=txn.id) }}">Edit</a> ·
+      <a href="{{ url_for('transactions.new_change', code=account.code, transaction=txn.id) }}">Log a change to this transaction</a></p>{% endif %}
+  </section>
+
+  <section class="card">
+    <h2>Changes</h2>
+    {% if changes %}
+    <ul class="plain-list">
+      {% for c in changes %}
+      <li><a href="{{ url_for('transactions.change', code=account.code, change_id=c.id) }}">{{ c.code }} {{ c.title }}</a>
+        <span class="change-type change-{{ c.change_type }}">{{ c.type_label }}</span> <span class="muted">{{ c.published_at | ist }}</span></li>
+      {% endfor %}
+    </ul>
+    {% else %}<p class="muted">No published changes.</p>{% endif %}
+  </section>
+
+  <section class="card">
+    <h2>Doubts</h2>
+    {% if doubts %}
+    <ul class="plain-list">
+      {% for q in doubts %}
+      <li><a href="{{ url_for('doubts.question', code=account.code, question_id=q.id) }}">{{ q.code }} {{ q.title }}</a>
+        <span class="q-status q-{{ q.status }}">{{ q.status_label }}</span></li>
+      {% endfor %}
+    </ul>
+    {% else %}<p class="muted">No doubts raised about this transaction.</p>{% endif %}
+    {% if g.user.can_contribute(account) %}<p><a href="{{ url_for('doubts.new_question', code=account.code, transaction_id=txn.id) }}">Raise a doubt about {{ txn.code }}</a></p>{% endif %}
+  </section>
+</div>
+<div>
+  <section class="card">
+    <h2>Details</h2>
+    <dl class="details">
+      <dt>System</dt><dd>{{ txn.system or "—" }}</dd>
+      <dt>Frequency</dt><dd>{{ txn.frequency }}</dd>
+      <dt>Owner</dt><dd>{{ txn.owner.full_name if txn.owner else "—" }}</dd>
+      <dt>Project</dt><dd>{% if txn.project %}<a href="{{ url_for('projects.project', code=account.code, project_id=txn.project_id) }}">{{ txn.project.name }}</a>{% else %}—{% endif %}</dd>
+      <dt>KT topic</dt><dd>{% if txn.topic %}<a href="{{ url_for('kt.topic', code=account.code, topic_id=txn.topic_id) }}">{{ txn.topic.title }}</a>{% else %}—{% endif %}</dd>
+      <dt>SOP</dt><dd>{% if txn.sop %}<a href="{{ url_for('sops.sop', code=account.code, sop_id=txn.sop_id) }}">{{ txn.sop.code }} {{ txn.sop.title }}</a>{% else %}—{% endif %}</dd>
+      <dt>Updated</dt><dd>{{ txn.updated_at | ist }}{% if txn.updated_by %} by {{ txn.updated_by.full_name }}{% endif %}</dd>
+    </dl>
+  </section>
+</div>
+</div>
+{% endblock %}

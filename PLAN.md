@@ -65,7 +65,14 @@ accounts** and sees only those accounts (FAXORA's team scoping, reused).
   KT team; each member confirms. Client sign-off + internal KT = project complete.
 - **KT documents:** SharePoint KT folder link and a register of document links per project.
 
-### 2.6 Added (suggested)
+### 2.6 Added in phase 4
+- **Doubts:** technical questions (optionally *blocking*) routed to the SME; answered, then resolved by
+  the asker.
+- **My next steps:** each person's pending actions on the home page, so nobody is stuck.
+- **Reports:** animated charts (KT progress, sign-off trend, project stages, acknowledgements, doubts)
+  and a team readiness table with CSV.
+
+### 2.7 Added (suggested)
 - **Account dashboard:** KT % complete, overdue topics, newcomers and readiness, SOPs due for review,
   unacknowledged changes.
 - **Search** across topics, SOPs, transactions and the glossary.
@@ -105,7 +112,7 @@ accounts** and sees only those accounts (FAXORA's team scoping, reused).
 | 1 | Rebrand; remove SOS/facility parts; client accounts and roles | **Done** (76 tests pass) |
 | 2 | KT tracker: modules, topics, workflow, sessions, ratings, dashboard | **Done** (96 tests pass) |
 | 3 | Scope of work and SOPs with versions, approval and review dates; plus projects (below) | **Done** (117 tests pass) |
-| 4 | Transaction catalogue and change log with acknowledgements | Change published and acknowledged |
+| 4 | Transaction catalogue and change log with acknowledgements; doubts, next steps, reports | **Done** (126 tests pass) |
 | 5 | Transition phases and exit criteria with sign-off | Phase signed off |
 | 6 | Newcomer learning paths, progress, Q&A, readiness | Newcomer reaches *ready* |
 | 7 | Reports, reminders, documents (HLD/LLD/Runbook), own GitHub repo, test and Azure deployment | Pilot with one account |

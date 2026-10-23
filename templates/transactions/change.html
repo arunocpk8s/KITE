@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}{{ change.code }} · {{ account.code }} · {{ app_name }}{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('transactions.change_log', code=account.code) }}">&larr; Change log · {{ account.name }}</a></p>
+<h1>{{ change.code }} {{ change.title }} <span class="change-type change-{{ change.change_type }}">{{ change.type_label }}</span>
+  {% if change.status == "DRAFT" %}<span class="sop-status sop-DRAFT">Draft</span>{% endif %}</h1>
+
+<div class="topic-layout">
+<div>
+  {% if my_ack and not my_ack.acked_at %}
+  <section class="card card-soft card-steps">
+    <h2>Please acknowledge</h2>
+    <form method="post" action="{{ url_for('transactions.acknowledge', code=account.code, change_id=change.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label for="ack-comment">Comment or question (optional)</label>
+      <input id="ack-comment" name="comment" maxlength="2000">
+      <button type="submit">I have read and understood this change</button>
+    </form>
+    <p class="hint">Not clear? <a href="{{ url_for('doubts.new_question', code=account.code, transaction_id=change.transaction_id or '', topic_id=change.topic_id or '', title='About ' ~ change.code ~ ': ') }}">Raise a doubt</a> and an SME will answer.</p>
+  </section>
+  {% endif %}
+  <section class="card">
+    <h2>What changed</h2>
+    <p class="description">{{ change.description }}</p>
+    {% if change.impact %}<h2>Impact on the team</h2><p class="description">{{ change.impact }}</p>{% endif %}
+    {% if can_edit %}
+    <p><a href="{{ url_for('transactions.edit_change', code=account.code, change_id=change.id) }}">Edit draft</a></p>
+    <form class="inline" method="post" action="{{ url_for('transactions.publish_change', code=account.code, change_id=change.id) }}" data-confirm="Publish {{ change.code }} and email the team?">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit">Publish and ask the team to acknowledge</button>
+    </form>
+    <form class="inline" method="post" action="{{ url_for('transactions.delete_change', code=account.code, change_id=change.id) }}" data-confirm="Delete this draft?">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="danger">Delete draft</button>
+    </form>
+    {% endif %}
+  </section>
+
+  {% if change.status == "PUBLISHED" %}
+  <section class="card" id="acks">
+    <h2>Acknowledgements <span class="muted">{{ change.acked | length }}/{{ change.acks | length }}</span></h2>
+    <ul class="plain-list">
+      {% for a in change.acks | sort(attribute='user.full_name') %}
+      <li>{% if a.acked_at %}<span class="tick">&#10003;</span> <strong>{{ a.user.full_name }}</strong> {{ a.acked_at | ist }}{% if a.comment %} · <span class="description">{{ a.comment }}</span>{% endif %}
+        {% else %}<span class="pending">&#9675;</span> {{ a.user.full_name }} <span class="muted">· waiting</span>{% endif %}</li>
+      {% else %}
+      <li class="muted">Nobody else was in the team when it was published.</li>
+      {% endfor %}
+    </ul>
+    {% if manager and change.pending_acks %}
+    <form method="post" action="{{ url_for('transactions.remind', code=account.code, change_id=change.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="small">Email a reminder to the {{ change.pending_acks | length }} still waiting</button>
+    </form>
+    {% endif %}
+  </section>
+  {% endif %}
+</div>
+<div>
+  <section class="card">
+    <h2>Details</h2>
+    <dl class="details">
+      <dt>Effective</dt><dd>{{ change.effective_date | date or "—" }}</dd>
+      <dt>Transaction</dt><dd>{% if change.transaction %}<a href="{{ url_for('transactions.transaction', code=account.code, txn_id=change.transaction_id) }}">{{ change.transaction.code }} {{ change.transaction.name }}</a>{% else %}—{% endif %}</dd>
+      <dt>SOP</dt><dd>{% if change.sop %}<a href="{{ url_for('sops.sop', code=account.code, sop_id=change.sop_id) }}">{{ change.sop.code }} {{ change.sop.title }}</a>{% else %}—{% endif %}</dd>
+      <dt>KT topic</dt><dd>{% if change.topic %}<a href="{{ url_for('kt.topic', code=account.code, topic_id=change.topic_id) }}">{{ change.topic.title }}</a>{% else %}—{% endif %}</dd>
+      <dt>Project</dt><dd>{{ change.project.name if change.project else "—" }}</dd>
+      <dt>Written by</dt><dd>{{ change.created_by.full_name }}</dd>
+      {% if change.published_at %}<dt>Published</dt><dd>{{ change.published_at | ist }} by {{ change.published_by.full_name }}</dd>{% endif %}
+    </dl>
+  </section>
+</div>
+</div>
+{% endblock %}

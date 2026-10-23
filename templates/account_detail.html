@@ -16,7 +16,10 @@
 <p><a class="button" href="{{ url_for('kt.plan', code=account.code) }}">Open the KT plan</a>
   <a class="button button-secondary" href="{{ url_for('sops.sop_list', code=account.code) }}">SOPs ({{ sop_stats.total }}{% if sop_stats.review_overdue %}, {{ sop_stats.review_overdue }} review overdue{% endif %})</a>
   <a class="button button-secondary" href="{{ url_for('sops.scope', code=account.code) }}">Scope of work</a>
-  <span class="muted">Transactions and newcomer onboarding arrive in the next phases.</span></p>
+  <a class="button button-secondary" href="{{ url_for('transactions.catalogue', code=account.code) }}">Transactions ({{ phase4.transactions }})</a>
+  <a class="button button-secondary" href="{{ url_for('transactions.change_log', code=account.code) }}">Change log ({{ phase4.changes }})</a>
+  <a class="button button-secondary" href="{{ url_for('doubts.doubt_list', code=account.code) }}">Doubts ({{ phase4.open_doubts }} open)</a>
+  <a class="button button-secondary" href="{{ url_for('reports.overview', account=account.code) }}">Reports</a></p>
 
 <section class="card">
   <div class="module-head">

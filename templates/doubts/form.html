@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Raise a doubt · {{ account.code }} · {{ app_name }}{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('doubts.doubt_list', code=account.code) }}">&larr; Doubts · {{ account.name }}</a></p>
+
+<section class="card narrow-form">
+  <h2>Raise a doubt</h2>
+  <p class="hint">It goes to the SME of the KT topic (or the transaction's owner), or to the KT leads to assign.</p>
+  <form method="post" action="{{ url_for('doubts.new_question', code=account.code) }}" novalidate>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label for="title">What do you need to know?</label>
+    <input id="title" name="title" value="{{ form.title }}" maxlength="200" required autofocus>
+    {% if errors.title %}<p class="error">{{ errors.title }}</p>{% endif %}
+    <label for="detail">Details (what you tried, error messages, screenshots in SharePoint)</label>
+    <textarea id="detail" name="detail" rows="5" maxlength="8000">{{ form.detail }}</textarea>
+    {% if errors.detail %}<p class="error">{{ errors.detail }}</p>{% endif %}
+    <label class="inline"><input type="checkbox" name="blocking" {% if form.blocking %}checked{% endif %}> I am blocked: I cannot move on without an answer</label>
+    <div class="row">
+      <div><label for="topic_id">KT topic</label>
+        <select id="topic_id" name="topic_id"><option value="">—</option>
+          {% for t in topics %}<option value="{{ t.id }}" {% if form.topic_id == t.id|string %}selected{% endif %}>{{ t.title }}</option>{% endfor %}</select>
+        {% if errors.topic_id %}<p class="error">{{ errors.topic_id }}</p>{% endif %}</div>
+      <div><label for="transaction_id">Transaction</label>
+        <select id="transaction_id" name="transaction_id"><option value="">—</option>
+          {% for t in transactions %}<option value="{{ t.id }}" {% if form.transaction_id == t.id|string %}selected{% endif %}>{{ t.code }} {{ t.name }}</option>{% endfor %}</select>
+        {% if errors.transaction_id %}<p class="error">{{ errors.transaction_id }}</p>{% endif %}</div>
+    </div>
+    <div class="row">
+      <div><label for="project_id">Project</label>
+        <select id="project_id" name="project_id"><option value="">—</option>
+          {% for p in projects %}<option value="{{ p.id }}" {% if form.project_id == p.id|string %}selected{% endif %}>{{ p.name }}</option>{% endfor %}</select>
+        {% if errors.project_id %}<p class="error">{{ errors.project_id }}</p>{% endif %}</div>
+      <div><label for="assigned_to_id">Ask a specific person (optional)</label>
+        <select id="assigned_to_id" name="assigned_to_id"><option value="">Automatic</option>
+          {% for u in answerers %}<option value="{{ u.id }}" {% if form.assigned_to_id == u.id|string %}selected{% endif %}>{{ u.full_name }} ({{ u.role_label }})</option>{% endfor %}</select>
+        {% if errors.assigned_to_id %}<p class="error">{{ errors.assigned_to_id }}</p>{% endif %}</div>
+    </div>
+    <button type="submit">Raise the doubt</button>
+    <a href="{{ url_for('doubts.doubt_list', code=account.code) }}">Cancel</a>
+  </form>
+</section>
+{% endblock %}

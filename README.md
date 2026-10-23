@@ -8,8 +8,9 @@ Developed by: **Arun Arumugam**
 
 The plan and build phases are in [PLAN.md](PLAN.md). **Done:** sign-in, client accounts, roles and
 the Admin console (phase 1); the KT tracker (phase 2); projects with hand-over checklist, client
-sign-off, internal KT and SharePoint KT documents; scope of work and SOPs (phase 3). Transactions,
-transition phases and newcomer onboarding follow in phases 4–6.
+sign-off, internal KT and SharePoint KT documents; scope of work and SOPs (phase 3); transaction
+catalogue, change log with acknowledgements, doubts, "My next steps" and reports with charts (phase 4).
+Transition phases and newcomer onboarding follow in phases 5–6.
 
 | Environment | Where | Database | Sign-in |
 |---|---|---|---|
@@ -60,6 +61,26 @@ Changing an approved SOP starts a new draft while the approved version stays in 
 the next review date (every 1–36 months); `sop-review-reminders` emails owners when a review is due.
 The **scope of work** holds contract dates, the SOW link, in/out-of-scope services, SLAs, RACI and
 contacts.
+
+**Transactions** (per account): a searchable catalogue (code, name, system, purpose, steps, frequency,
+criticality, owner, linked KT topic and SOP). The **change log** records new, changed and retired
+transactions and processes: a draft is published by its author or a KT lead, the team is emailed, and
+every non-viewer member at that moment must acknowledge it (KT leads can email a reminder). Publishing
+a "Retired" change retires its transaction.
+
+**Doubts** keep people moving: anyone (not viewers) raises a technical question, optionally marked
+*blocking*, about a topic, transaction or project. It goes to the topic's SME (else the transaction's
+owner, else the KT leads to assign). Answers email the asker; the asker resolves it once unblocked.
+
+**My next steps** (home page) lists everything waiting on each person: KT to confirm or rate, internal KT,
+changes to acknowledge, doubts to answer or check, sessions to schedule or record, SOPs to fix or review,
+topics to sign off, projects needing client sign-off (including for the client approver).
+
+**Reports** (`/reports`, per account or all): KT signed-off %, KT progress by project, sign-offs over
+the last 12 weeks, projects by stage, change acknowledgements, doubts, and a team readiness table
+(CSV export). Charts are drawn by KITE itself (no chart library or CDN), animate in, show values on
+hover or keyboard focus, and each has a table view. Animation is off for people who ask their system
+for reduced motion.
 
 ## Install and run (Windows, company PC)
 
@@ -172,6 +193,10 @@ admin.py      Admin console: client accounts, members, users, mail server, outbo
 kt.py         KT plan: modules, topics, workflow, sessions, ratings, receiver confirmation
 projects.py   projects: checklist, client sign-off, internal KT, SharePoint KT documents
 sops.py       SOPs (versions, review, approval, review dates, reminders) and scope of work
+transactions.py transaction catalogue and change log with acknowledgements
+doubts.py     doubts (technical questions) with replies, assignment and resolution
+nextsteps.py  "My next steps" for the home page
+reports.py    reports page, chart data and team readiness CSV
 models.py     database models and the start-up schema upgrade
 notify.py     SMTP email sending, outbox and retry
 timeutil.py   UTC storage, IST display, time left, month ranges, add_months

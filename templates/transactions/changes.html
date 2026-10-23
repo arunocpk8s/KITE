@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Change log · {{ account.code }} · {{ app_name }}{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('main.account_detail', code=account.code) }}">&larr; {{ account.name }}</a></p>
+<h1>Change log <span class="muted">· {{ account.name }} ({{ account.code }})</span></h1>
+<p class="muted">New, changed and retired transactions and processes. Everyone in the team acknowledges each published change.
+  {% if can_write %}<a class="button push-right" href="{{ url_for('transactions.new_change', code=account.code) }}">Log a change</a>{% endif %}</p>
+
+<section class="card">
+  {% if changes %}
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Change</th><th>Type</th><th>Linked</th><th>Effective</th><th>Published</th><th>Acknowledged</th></tr></thead>
+    <tbody>
+      {% for c in changes %}
+      {% set mine = c.ack_for(g.user) %}
+      <tr>
+        <td><a href="{{ url_for('transactions.change', code=account.code, change_id=c.id) }}">{{ c.code }} {{ c.title }}</a>
+          {% if mine and not mine.acked_at %}<br><span class="overdue">Waiting for your acknowledgement</span>{% endif %}</td>
+        <td><span class="change-type change-{{ c.change_type }}">{{ c.type_label }}</span></td>
+        <td>{{ c.transaction.code if c.transaction else "" }}{% if c.sop %} {{ c.sop.code }}{% endif %}</td>
+        <td>{{ c.effective_date | date or "—" }}</td>
+        <td>{% if c.status == "DRAFT" %}<span class="muted">Draft</span>{% else %}{{ c.published_at | ist }}{% endif %}</td>
+        <td>{% if c.status == "PUBLISHED" %}
+          {% set pct = (100 * (c.acked | length) / (c.acks | length)) | round | int if c.acks else 100 %}
+          <span class="progress progress-wide progress-animated" title="{{ pct }}%"><span style="width: {{ pct }}%"></span></span>
+          {{ c.acked | length }}/{{ c.acks | length }}{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <p class="muted">No changes logged yet.</p>
+  {% endif %}
+</section>
+{% endblock %}

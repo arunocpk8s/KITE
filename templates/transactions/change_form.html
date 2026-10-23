@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}{{ "Edit " ~ change.code if change else "Log a change" }} · {{ account.code }} · {{ app_name }}{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('transactions.change', code=account.code, change_id=change.id) if change else url_for('transactions.change_log', code=account.code) }}">&larr;
+  {{ change.code if change else "Change log · " ~ account.name }}</a></p>
+
+<section class="card">
+  <h2>{{ "Edit draft " ~ change.code if change else "Log a change" }}</h2>
+  <p class="hint">Saved as a draft. Publishing emails the team, and each person acknowledges it.</p>
+  <form method="post" action="{{ url_for('transactions.edit_change', code=account.code, change_id=change.id) if change else url_for('transactions.new_change', code=account.code) }}" novalidate>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="row">
+      <div><label for="title">Title</label><input id="title" name="title" value="{{ form.title }}" maxlength="200" required autofocus>
+        {% if errors.title %}<p class="error">{{ errors.title }}</p>{% endif %}</div>
+      <div class="row">
+        <div><label for="change_type">Type</label>
+          <select id="change_type" name="change_type">{% for k, v in types.items() %}<option value="{{ k }}" {% if form.change_type == k %}selected{% endif %}>{{ v }}</option>{% endfor %}</select>
+          {% if errors.change_type %}<p class="error">{{ errors.change_type }}</p>{% endif %}</div>
+        <div><label for="effective_date">Effective from</label><input id="effective_date" name="effective_date" type="date" value="{{ form.effective_date }}">
+          {% if errors.effective_date %}<p class="error">{{ errors.effective_date }}</p>{% endif %}</div>
+      </div>
+    </div>
+    <label for="description">What changed</label>
+    <textarea id="description" name="description" rows="5" maxlength="8000" required>{{ form.description }}</textarea>
+    {% if errors.description %}<p class="error">{{ errors.description }}</p>{% endif %}
+    <label for="impact">Impact on the team (optional)</label>
+    <textarea id="impact" name="impact" rows="3" maxlength="4000" placeholder="What people must do differently">{{ form.impact }}</textarea>
+    {% if errors.impact %}<p class="error">{{ errors.impact }}</p>{% endif %}
+    <div class="row">
+      <div class="row">
+        <div><label for="transaction_id">Transaction</label>
+          <select id="transaction_id" name="transaction_id"><option value="">—</option>
+            {% for t in transactions %}<option value="{{ t.id }}" {% if form.transaction_id == t.id|string %}selected{% endif %}>{{ t.code }} {{ t.name }}</option>{% endfor %}</select>
+          {% if errors.transaction_id %}<p class="error">{{ errors.transaction_id }}</p>{% endif %}</div>
+        <div><label for="sop_id">SOP</label>
+          <select id="sop_id" name="sop_id"><option value="">—</option>
+            {% for s in sops %}<option value="{{ s.id }}" {% if form.sop_id == s.id|string %}selected{% endif %}>{{ s.code }} {{ s.title }}</option>{% endfor %}</select>
+          {% if errors.sop_id %}<p class="error">{{ errors.sop_id }}</p>{% endif %}</div>
+      </div>
+      <div class="row">
+        <div><label for="topic_id">KT topic</label>
+          <select id="topic_id" name="topic_id"><option value="">—</option>
+            {% for t in topics %}<option value="{{ t.id }}" {% if form.topic_id == t.id|string %}selected{% endif %}>{{ t.title }}</option>{% endfor %}</select>
+          {% if errors.topic_id %}<p class="error">{{ errors.topic_id }}</p>{% endif %}</div>
+        <div><label for="project_id">Project</label>
+          <select id="project_id" name="project_id"><option value="">—</option>
+            {% for p in projects %}<option value="{{ p.id }}" {% if form.project_id == p.id|string %}selected{% endif %}>{{ p.name }}</option>{% endfor %}</select>
+          {% if errors.project_id %}<p class="error">{{ errors.project_id }}</p>{% endif %}</div>
+      </div>
+    </div>
+    <p class="hint">A "Retired" change retires its linked transaction when published; "New" makes it active.</p>
+    <button type="submit">Save draft</button>
+    <a href="{{ url_for('transactions.change', code=account.code, change_id=change.id) if change else url_for('transactions.change_log', code=account.code) }}">Cancel</a>
+  </form>
+</section>
+{% endblock %}

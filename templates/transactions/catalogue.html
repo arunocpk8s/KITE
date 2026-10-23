@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Transactions · {{ account.code }} · {{ app_name }}{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('main.account_detail', code=account.code) }}">&larr; {{ account.name }}</a></p>
+<h1>Transaction catalogue <span class="muted">· {{ account.name }} ({{ account.code }})</span></h1>
+
+<form class="filters" method="get" action="{{ url_for('transactions.catalogue', code=account.code) }}">
+  <label>Search
+    <input name="q" value="{{ filters.q }}" placeholder="Code, name, system or purpose" maxlength="100">
+  </label>
+  <label>Criticality
+    <select name="criticality">
+      <option value="">Any</option>
+      {% for c in criticalities %}<option {% if filters.criticality == c %}selected{% endif %}>{{ c }}</option>{% endfor %}
+    </select>
+  </label>
+  <label class="inline"><input type="checkbox" name="show" value="all" {% if filters.show == 'all' %}checked{% endif %}> Include retired</label>
+  <button type="submit">Search</button>
+  <a href="{{ url_for('transactions.catalogue', code=account.code) }}">Clear</a>
+  <a class="push-right" href="{{ url_for('transactions.change_log', code=account.code) }}">Change log</a>
+  {% if can_edit %}<a class="button" href="{{ url_for('transactions.new_transaction', code=account.code) }}">Add transaction</a>{% endif %}
+</form>
+
+<section class="card">
+  {% if transactions %}
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Code</th><th>Name</th><th>System</th><th>Frequency</th><th>Criticality</th><th>Owner</th><th>Linked</th></tr></thead>
+    <tbody>
+      {% for t in transactions %}
+      <tr {% if not t.active %}class="inactive-row"{% endif %}>
+        <td><a href="{{ url_for('transactions.transaction', code=account.code, txn_id=t.id) }}"><strong>{{ t.code }}</strong></a></td>
+        <td>{{ t.name }}{% if not t.active %} <span class="muted">(retired)</span>{% endif %}</td>
+        <td>{{ t.system or "—" }}</td>
+        <td>{{ t.frequency }}</td>
+        <td><span class="crit crit-{{ t.criticality }}">{{ t.criticality }}</span></td>
+        <td>{{ t.owner.full_name if t.owner else "—" }}</td>
+        <td>{% if t.topic %}KT{% endif %}{% if t.topic and t.sop %} · {% endif %}{% if t.sop %}{{ t.sop.code }}{% endif %}{% if not t.topic and not t.sop %}<span class="muted">—</span>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <p class="muted">{% if filters.q or filters.criticality %}No transactions match.{% else %}No transactions yet.{% if can_edit %} <a href="{{ url_for('transactions.new_transaction', code=account.code) }}">Add the first one</a>.{% endif %}{% endif %}</p>
+  {% endif %}
+</section>
+{% endblock %}

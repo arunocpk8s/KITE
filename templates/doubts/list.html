@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Doubts · {{ account.code }} · {{ app_name }}{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('main.account_detail', code=account.code) }}">&larr; {{ account.name }}</a></p>
+<h1>Doubts <span class="muted">· {{ account.name }} ({{ account.code }})</span></h1>
+<p class="muted">Technical questions that keep someone from moving on. Mark a doubt blocking if you cannot continue without an answer.</p>
+
+<nav class="tabs">
+  {% for key, label in [("open", "Open"), ("blocking", "Blocking"), ("mine", "Mine"), ("unassigned", "Unassigned"), ("all", "All")] %}
+  <a href="{{ url_for('doubts.doubt_list', code=account.code, show=key) }}" {% if show == key %}class="active"{% endif %}>{{ label }}</a>
+  {% endfor %}
+  {% if can_ask %}<a class="button push-right" href="{{ url_for('doubts.new_question', code=account.code) }}">Raise a doubt</a>{% endif %}
+</nav>
+
+<section class="card">
+  {% if questions %}
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Doubt</th><th>About</th><th>Raised by</th><th>Assigned to</th><th>Status</th><th>Updated</th></tr></thead>
+    <tbody>
+      {% for q in questions %}
+      <tr>
+        <td><a href="{{ url_for('doubts.question', code=account.code, question_id=q.id) }}">{{ q.code }} {{ q.title }}</a>
+          {% if q.blocking and q.is_open %}<span class="badge-breached">Blocking</span>{% endif %}</td>
+        <td>{{ q.topic.title if q.topic else (q.transaction.code if q.transaction else (q.project.name if q.project else "—")) }}</td>
+        <td>{{ q.asked_by.full_name }}</td>
+        <td>{{ q.assigned_to.full_name if q.assigned_to else "Not assigned" }}</td>
+        <td><span class="q-status q-{{ q.status }}">{{ q.status_label }}</span></td>
+        <td>{{ q.updated_at | ist }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <p class="muted">No doubts here.</p>
+  {% endif %}
+</section>
+{% endblock %}

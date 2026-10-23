@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}{{ "Edit " ~ txn.code if txn else "Add transaction" }} · {{ account.code }} · {{ app_name }}{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('transactions.transaction', code=account.code, txn_id=txn.id) if txn else url_for('transactions.catalogue', code=account.code) }}">&larr;
+  {{ txn.code if txn else "Transactions · " ~ account.name }}</a></p>
+
+<section class="card">
+  <h2>{{ "Edit " ~ txn.code if txn else "Add a transaction" }}</h2>
+  <form method="post" action="{{ url_for('transactions.edit_transaction', code=account.code, txn_id=txn.id) if txn else url_for('transactions.new_transaction', code=account.code) }}" novalidate>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="row">
+      <div class="row">
+        <div><label for="code">Code</label><input id="code" name="code" value="{{ form.code }}" maxlength="40" placeholder="e.g. FB60" required autofocus>
+          {% if errors.code %}<p class="error">{{ errors.code }}</p>{% endif %}</div>
+        <div><label for="system">System / module</label><input id="system" name="system" value="{{ form.system }}" maxlength="120" placeholder="e.g. SAP FI">
+          {% if errors.system %}<p class="error">{{ errors.system }}</p>{% endif %}</div>
+      </div>
+      <div><label for="name">Name</label><input id="name" name="name" value="{{ form.name }}" maxlength="200" placeholder="e.g. Enter vendor invoice" required>
+        {% if errors.name %}<p class="error">{{ errors.name }}</p>{% endif %}</div>
+    </div>
+    <label for="purpose">Purpose</label>
+    <textarea id="purpose" name="purpose" rows="2" maxlength="4000" required>{{ form.purpose }}</textarea>
+    {% if errors.purpose %}<p class="error">{{ errors.purpose }}</p>{% endif %}
+    <label for="steps">Steps (optional)</label>
+    <textarea id="steps" name="steps" rows="8" maxlength="20000" placeholder="1. ...&#10;2. ...">{{ form.steps }}</textarea>
+    {% if errors.steps %}<p class="error">{{ errors.steps }}</p>{% endif %}
+    <div class="row">
+      <div class="row">
+        <div><label for="frequency">Frequency</label>
+          <select id="frequency" name="frequency">{% for f in frequencies %}<option {% if form.frequency == f %}selected{% endif %}>{{ f }}</option>{% endfor %}</select>
+          {% if errors.frequency %}<p class="error">{{ errors.frequency }}</p>{% endif %}</div>
+        <div><label for="criticality">Criticality</label>
+          <select id="criticality" name="criticality">{% for c in criticalities %}<option {% if form.criticality == c %}selected{% endif %}>{{ c }}</option>{% endfor %}</select>
+          {% if errors.criticality %}<p class="error">{{ errors.criticality }}</p>{% endif %}</div>
+      </div>
+      <div><label for="owner_id">Owner (SME)</label>
+        <select id="owner_id" name="owner_id">
+          <option value="">Not assigned</option>
+          {% for u in owners %}<option value="{{ u.id }}" {% if form.owner_id == u.id|string %}selected{% endif %}>{{ u.full_name }} ({{ u.role_label }})</option>{% endfor %}
+        </select>
+        {% if errors.owner_id %}<p class="error">{{ errors.owner_id }}</p>{% endif %}</div>
+    </div>
+    <div class="row">
+      <div class="row">
+        <div><label for="project_id">Project</label>
+          <select id="project_id" name="project_id"><option value="">—</option>
+            {% for p in projects %}<option value="{{ p.id }}" {% if form.project_id == p.id|string %}selected{% endif %}>{{ p.name }}</option>{% endfor %}</select>
+          {% if errors.project_id %}<p class="error">{{ errors.project_id }}</p>{% endif %}</div>
+        <div><label for="topic_id">KT topic</label>
+          <select id="topic_id" name="topic_id"><option value="">—</option>
+            {% for t in topics %}<option value="{{ t.id }}" {% if form.topic_id == t.id|string %}selected{% endif %}>{{ t.title }}</option>{% endfor %}</select>
+          {% if errors.topic_id %}<p class="error">{{ errors.topic_id }}</p>{% endif %}</div>
+      </div>
+      <div><label for="sop_id">SOP</label>
+        <select id="sop_id" name="sop_id"><option value="">—</option>
+          {% for s in sops %}<option value="{{ s.id }}" {% if form.sop_id == s.id|string %}selected{% endif %}>{{ s.code }} {{ s.title }}</option>{% endfor %}</select>
+        {% if errors.sop_id %}<p class="error">{{ errors.sop_id }}</p>{% endif %}</div>
+    </div>
+    <label for="link">Document link (SharePoint, optional)</label>
+    <input id="link" name="link" value="{{ form.link }}" maxlength="500" placeholder="https://...">
+    {% if errors.link %}<p class="error">{{ errors.link }}</p>{% endif %}
+    <button type="submit">{{ "Save" if txn else "Add to the catalogue" }}</button>
+    <a href="{{ url_for('transactions.transaction', code=account.code, txn_id=txn.id) if txn else url_for('transactions.catalogue', code=account.code) }}">Cancel</a>
+  </form>
+</section>
+{% endblock %}

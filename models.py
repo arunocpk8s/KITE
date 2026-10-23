@@ -639,6 +639,178 @@ class ScopeItem(db.Model):
     updated_by = db.relationship("User")
 
 
+# --- Transactions and change log -----------------------------------------------------------------
+TXN_FREQUENCIES = ("Daily", "Weekly", "Monthly", "Quarterly", "Yearly", "Ad hoc")
+TXN_CRITICALITY = ("High", "Medium", "Low")
+CHANGE_TYPES = {"NEW": "New", "CHANGED": "Changed", "RETIRED": "Retired"}
+
+
+class Transaction(db.Model):
+    """A client transaction (e.g. an ERP transaction code or a business process step) newcomers look up."""
+
+    __tablename__ = "transactions"
+    __table_args__ = (db.UniqueConstraint("account_id", "code", name="uq_transaction_code"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    account_id = db.Column(db.Integer, db.ForeignKey("accounts.id"), nullable=False, index=True)
+    project_id = db.Column(db.Integer, db.ForeignKey("kt_projects.id"), index=True)
+    code = db.Column(db.String(40), nullable=False)
+    name = db.Column(db.String(200), nullable=False)
+    system = db.Column(db.String(120), nullable=False, default="")
+    purpose = db.Column(db.Text, nullable=False, default="")
+    steps = db.Column(db.Text, nullable=False, default="")
+    frequency = db.Column(db.String(20), nullable=False, default="Ad hoc")
+    criticality = db.Column(db.String(10), nullable=False, default="Medium")
+    owner_id = db.Column(db.Integer, db.ForeignKey("users.id"), index=True)
+    topic_id = db.Column(db.Integer, db.ForeignKey("kt_topics.id"))
+    sop_id = db.Column(db.Integer, db.ForeignKey("sops.id"))
+    link = db.Column(db.String(500), nullable=False, default="")
+    active = db.Column(db.Boolean, nullable=False, default=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    updated_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+
+    account = db.relationship("Account")
+    project = db.relationship("KTProject")
+    owner = db.relationship("User", foreign_keys=[owner_id])
+    updated_by = db.relationship("User", foreign_keys=[updated_by_id])
+    topic = db.relationship("KTTopic")
+    sop = db.relationship("Sop")
+
+
+class Change(db.Model):
+    """A change-log entry: a new, changed or retired transaction or process. Once published, the team
+    is emailed and each member acknowledges it. Published entries are not edited; publish a new one."""
+
+    __tablename__ = "changes"
+    __table_args__ = (db.UniqueConstraint("account_id", "number", name="uq_change_number"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    account_id = db.Column(db.Integer, db.ForeignKey("accounts.id"), nullable=False, index=True)
+    project_id = db.Column(db.Integer, db.ForeignKey("kt_projects.id"), index=True)
+    number = db.Column(db.Integer, nullable=False)
+    title = db.Column(db.String(200), nullable=False)
+    change_type = db.Column(db.String(10), nullable=False, default="CHANGED")
+    description = db.Column(db.Text, nullable=False, default="")
+    impact = db.Column(db.Text, nullable=False, default="")
+    effective_date = db.Column(db.Date)
+    transaction_id = db.Column(db.Integer, db.ForeignKey("transactions.id"))
+    sop_id = db.Column(db.Integer, db.ForeignKey("sops.id"))
+    topic_id = db.Column(db.Integer, db.ForeignKey("kt_topics.id"))
+    status = db.Column(db.String(10), nullable=False, default="DRAFT", index=True)
+    created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    published_at = db.Column(db.DateTime)
+    published_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+
+    account = db.relationship("Account")
+    project = db.relationship("KTProject")
+    transaction = db.relationship("Transaction")
+    sop = db.relationship("Sop")
+    topic = db.relationship("KTTopic")
+    created_by = db.relationship("User", foreign_keys=[created_by_id])
+    published_by = db.relationship("User", foreign_keys=[published_by_id])
+    acks = db.relationship("ChangeAck", back_populates="change", cascade="all, delete-orphan")
+
+    @property
+    def code(self):
+        return f"CHG-{self.number:03d}"
+
+    @property
+    def type_label(self):
+        return CHANGE_TYPES.get(self.change_type, self.change_type)
+
+    @property
+    def acked(self):
+        return [a for a in self.acks if a.acked_at]
+
+    @property
+    def pending_acks(self):
+        return sorted((a for a in self.acks if a.acked_at is None), key=lambda a: a.user.full_name)
+
+    def ack_for(self, user):
+        return next((a for a in self.acks if a.user_id == user.id), None)
+
+
+class ChangeAck(db.Model):
+    """Someone who must acknowledge a published change (everyone in the team at publish time)."""
+
+    __tablename__ = "change_acks"
+    __table_args__ = (db.UniqueConstraint("change_id", "user_id", name="uq_change_ack"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    change_id = db.Column(db.Integer, db.ForeignKey("changes.id"), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    acked_at = db.Column(db.DateTime)
+    comment = db.Column(db.Text, nullable=False, default="")
+
+    change = db.relationship("Change", back_populates="acks")
+    user = db.relationship("User")
+
+
+# --- Doubts: technical questions that keep people from moving on ---------------------------------
+QUESTION_STATUSES = {"OPEN": "Open", "ANSWERED": "Answered", "RESOLVED": "Resolved"}
+
+
+class Question(db.Model):
+    """A doubt raised by someone in the team, assigned to an SME. OPEN -> ANSWERED (someone replied)
+    -> RESOLVED (the asker is unblocked). A reply from the asker reopens it."""
+
+    __tablename__ = "questions"
+    __table_args__ = (db.UniqueConstraint("account_id", "number", name="uq_question_number"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    account_id = db.Column(db.Integer, db.ForeignKey("accounts.id"), nullable=False, index=True)
+    project_id = db.Column(db.Integer, db.ForeignKey("kt_projects.id"), index=True)
+    topic_id = db.Column(db.Integer, db.ForeignKey("kt_topics.id"), index=True)
+    transaction_id = db.Column(db.Integer, db.ForeignKey("transactions.id"), index=True)
+    number = db.Column(db.Integer, nullable=False)
+    title = db.Column(db.String(200), nullable=False)
+    detail = db.Column(db.Text, nullable=False, default="")
+    # Blocking: the person cannot move on with their work or KT until it is answered.
+    blocking = db.Column(db.Boolean, nullable=False, default=False)
+    asked_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    assigned_to_id = db.Column(db.Integer, db.ForeignKey("users.id"), index=True)
+    status = db.Column(db.String(10), nullable=False, default="OPEN", index=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    resolved_at = db.Column(db.DateTime)
+
+    account = db.relationship("Account")
+    project = db.relationship("KTProject")
+    topic = db.relationship("KTTopic")
+    transaction = db.relationship("Transaction")
+    asked_by = db.relationship("User", foreign_keys=[asked_by_id])
+    assigned_to = db.relationship("User", foreign_keys=[assigned_to_id])
+    replies = db.relationship("QuestionReply", back_populates="question", order_by="QuestionReply.id",
+                              cascade="all, delete-orphan")
+
+    @property
+    def code(self):
+        return f"Q-{self.number:03d}"
+
+    @property
+    def status_label(self):
+        return QUESTION_STATUSES.get(self.status, self.status)
+
+    @property
+    def is_open(self):
+        return self.status != "RESOLVED"
+
+
+class QuestionReply(db.Model):
+    __tablename__ = "question_replies"
+
+    id = db.Column(db.Integer, primary_key=True)
+    question_id = db.Column(db.Integer, db.ForeignKey("questions.id"), nullable=False, index=True)
+    author_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    body = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+
+    question = db.relationship("Question", back_populates="replies")
+    author = db.relationship("User")
+
+
 @event.listens_for(KTEvent, "before_update")
 @event.listens_for(KTEvent, "before_delete")
 @event.listens_for(ProjectEvent, "before_update")

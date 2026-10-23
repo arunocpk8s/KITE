@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+{% block title %}Reports · {{ app_name }}{% endblock %}
+{% macro legend(items) %}
+<ul class="viz-legend">{% for name, color in items %}<li><span class="swatch" style="background: {{ color }}"></span>{{ name }}</li>{% endfor %}</ul>
+{% endmacro %}
+{% macro stacked(chart, unit) %}
+{% if chart.bars %}
+{{ legend(chart.legend) }}
+<div class="hbars">
+  {% for b in chart.bars %}
+  <div class="hbar-row">
+    <span class="hbar-label" title="{{ b.label }}">{{ b.label }}</span>
+    <span class="hbar-track">
+      <span class="hbar bar-grow" style="width: {{ b.width }}%; --i: {{ loop.index0 }}">
+        {% for s in b.segments %}<span class="hbar-seg" style="flex-grow: {{ s.count }}; background: {{ s.color }}" tabindex="0"
+          data-tip-value="{{ s.count }} {{ unit }}" data-tip-label="{{ s.name }} · {{ b.label }} ({{ s.share }}%)"></span>{% endfor %}
+      </span>
+      <span class="hbar-total">{{ b.total }}</span>
+    </span>
+  </div>
+  {% endfor %}
+</div>
+<details class="viz-table"><summary>Show as table</summary>
+  <table><thead><tr><th></th>{% for name, _ in chart.legend %}<th>{{ name }}</th>{% endfor %}<th>Total</th></tr></thead>
+    <tbody>{% for b in chart.bars %}<tr><td>{{ b.label }}</td>{% for n in b.counts %}<td class="num">{{ n }}</td>{% endfor %}<td class="num">{{ b.total }}</td></tr>{% endfor %}</tbody></table>
+</details>
+{% else %}
+<p class="muted">Nothing to show yet.</p>
+{% endif %}
+{% endmacro %}
+
+{% block content %}
+<h1>Reports {% if chosen %}<span class="muted">· {{ chosen.name }} ({{ chosen.code }})</span>{% else %}<span class="muted">· all my accounts</span>{% endif %}</h1>
+
+<form class="filters" method="get" action="{{ url_for('reports.overview') }}">
+  <label>Account
+    <select name="account" data-autosubmit>
+      <option value="">All my accounts</option>
+      {% for a in accounts %}<option value="{{ a.code }}" {% if chosen and chosen.id == a.id %}selected{% endif %}>{{ a.code }} · {{ a.name }}</option>{% endfor %}
+    </select>
+  </label>
+  <noscript><button type="submit">Show</button></noscript>
+  <a class="push-right" href="{{ url_for('reports.readiness_csv', account=chosen.code if chosen else '') }}">Export team readiness (CSV)</a>
+</form>
+
+<section class="report-head">
+  <div class="hero tile">
+    <span class="tile-label">KT signed off</span>
+    <span class="hero-value">{{ tiles.progress }}%</span>
+    <span class="progress progress-animated"><span style="width: {{ tiles.progress }}%"></span></span>
+    <span class="muted">{{ tiles.signed }} of {{ tiles.topics }} topics</span>
+  </div>
+  <div class="tiles tiles-4">
+    <div class="tile"><span class="tile-value">{{ tiles.complete }}/{{ tiles.projects }}</span><span class="tile-label">Projects complete</span></div>
+    <div class="tile {% if tiles.blocking %}tile-alert{% endif %}"><span class="tile-value">{{ tiles.open_doubts }}</span><span class="tile-label">Open doubts{% if tiles.blocking %} · {{ tiles.blocking }} blocking{% endif %}</span></div>
+    <div class="tile"><span class="tile-value">{{ tiles.pending_acks }}</span><span class="tile-label">Change acknowledgements waiting</span></div>
+    <div class="tile {% if tiles.overdue or tiles.reviews_overdue %}tile-alert{% endif %}"><span class="tile-value">{{ tiles.overdue }}</span><span class="tile-label">Overdue topics{% if tiles.reviews_overdue %} · {{ tiles.reviews_overdue }} SOP reviews overdue{% endif %}</span></div>
+  </div>
+</section>
+
+<div class="viz-grid">
+  <section class="card viz-card">
+    <h2>KT progress by project</h2>
+    <p class="viz-sub">Topics per project by stage (cancelled left out)</p>
+    {{ stacked(kt, "topics") }}
+  </section>
+
+  <section class="card viz-card">
+    <h2>Topics signed off</h2>
+    <p class="viz-sub">Running total at the end of each week, {{ trend.first }} – {{ trend.last }}{% if trend.added %} · <strong>+{{ trend.added }}</strong> in 12 weeks{% endif %}</p>
+    <svg class="viz-line" viewBox="0 0 660 226" role="img" aria-label="Topics signed off: {{ trend.total }} by {{ trend.last }}">
+      {% for v, y in trend.ticks %}
+      <line class="grid" x1="{{ trend.x0 }}" x2="{{ trend.x1 }}" y1="{{ y }}" y2="{{ y }}"></line>
+      <text class="axis" x="{{ trend.x0 - 8 }}" y="{{ y + 4 }}" text-anchor="end">{{ v }}</text>
+      {% endfor %}
+      <line class="baseline" x1="{{ trend.x0 }}" x2="{{ trend.x1 }}" y1="{{ trend.y0 }}" y2="{{ trend.y0 }}"></line>
+      <path class="area-fade" d="{{ trend.area }}" fill="{{ series }}" fill-opacity="0.1"></path>
+      <path class="line-draw" d="{{ trend.line }}" pathLength="1" fill="none" stroke="{{ series }}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"></path>
+      {% set last = trend.points[-1] %}
+      <circle class="dot-pop" cx="{{ last.x }}" cy="{{ last.y }}" r="5" fill="{{ series }}" stroke="#fff" stroke-width="2"></circle>
+      <text class="end-label" x="{{ last.x - 10 }}" y="{{ last.y - 12 }}" text-anchor="end">{{ last.value }}</text>
+      <text class="axis" x="{{ trend.x0 }}" y="{{ trend.y0 + 20 }}">{{ trend.first }}</text>
+      <text class="axis" x="{{ trend.x1 }}" y="{{ trend.y0 + 20 }}" text-anchor="end">{{ trend.last }}</text>
+      {% for p in trend.points %}
+      <g class="hit" tabindex="0" data-tip-value="{{ p.value }} signed off" data-tip-label="{{ p.label }}">
+        <rect x="{{ p.hit_x }}" y="10" width="{{ p.hit_w }}" height="{{ trend.y0 - 10 }}" fill="transparent"></rect>
+        <line class="crosshair" x1="{{ p.x }}" x2="{{ p.x }}" y1="12" y2="{{ trend.y0 }}"></line>
+        <circle class="hover-dot" cx="{{ p.x }}" cy="{{ p.y }}" r="4" fill="{{ series }}" stroke="#fff" stroke-width="2"></circle>
+      </g>
+      {% endfor %}
+    </svg>
+    <details class="viz-table"><summary>Show as table</summary>
+      <table><thead><tr><th>Week</th><th>Signed off (total)</th></tr></thead>
+        <tbody>{% for p in trend.points %}<tr><td>{{ p.label }}</td><td class="num">{{ p.value }}</td></tr>{% endfor %}</tbody></table>
+    </details>
+  </section>
+
+  <section class="card viz-card">
+    <h2>Projects by stage</h2>
+    <p class="viz-sub">Where each project is: KT, checklist, client sign-off, internal KT</p>
+    <div class="columns">
+      {% for s in stages %}
+      <div class="col" tabindex="0" data-tip-value="{{ s.count }} project{{ '' if s.count == 1 else 's' }}" data-tip-label="{{ s.label }}">
+        <span class="col-value">{{ s.count }}</span>
+        <span class="col-bar col-grow" style="height: {{ [s.height, 2] | max }}%; background: {{ series }}; --i: {{ loop.index0 }}"></span>
+        <span class="col-label">{{ s.label }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="card viz-card">
+    <h2>Change acknowledgements</h2>
+    <p class="viz-sub">Latest published changes: share of the team who acknowledged</p>
+    {% if acks %}
+    <div class="meters">
+      {% for a in acks %}
+      <div class="meter-row" tabindex="0" data-tip-value="{{ a.done }} of {{ a.total }} acknowledged" data-tip-label="{{ a.change.account.code }} {{ a.change.code }} {{ a.change.title }}">
+        <a class="meter-label" href="{{ url_for('transactions.change', code=a.change.account.code, change_id=a.change.id) }}">{{ a.change.code }} {{ a.change.title }}</a>
+        <span class="meter"><span class="meter-fill bar-grow" style="width: {{ a.pct }}%; --i: {{ loop.index0 }}"></span></span>
+        <span class="meter-value">{{ a.pct }}%</span>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="muted">No published changes yet.</p>
+    {% endif %}
+  </section>
+
+  <section class="card viz-card">
+    <h2>Doubts</h2>
+    <p class="viz-sub">By {{ "account" if not chosen and accounts | length > 1 else "project" }} and status</p>
+    {{ stacked(doubts, "doubts") }}
+  </section>
+</div>
+
+<section class="card">
+  <h2>Team readiness</h2>
+  <p class="viz-sub">Ready = every KT received is confirmed, internal KT done, every change acknowledged, and no blocking doubt.</p>
+  {% if people %}
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Name</th><th>Role</th><th class="num">KT confirmed</th><th class="num">Understanding</th><th class="num">Internal KT</th><th class="num">Changes acknowledged</th><th class="num">Open doubts</th><th>Status</th></tr></thead>
+    <tbody>
+      {% for r in people %}
+      <tr>
+        <td>{{ r.user.full_name }}</td>
+        <td>{{ r.user.role_label }}</td>
+        <td class="num">{{ r.confirmed }}/{{ r.received }}</td>
+        <td class="num">{{ r.understanding ~ "/5" if r.understanding else "—" }}</td>
+        <td class="num">{{ r.internal_done }}/{{ r.internal_total }}</td>
+        <td class="num">{{ r.acked }}/{{ r.acks_total }}</td>
+        <td class="num">{{ r.open_doubts }}{% if r.blocking %} <span class="overdue">({{ r.blocking }} blocking)</span>{% endif %}</td>
+        <td>{% if r.ready %}<span class="ready-chip"><span class="tick">&#10003;</span> Ready</span>{% elif r.missing %}<span class="muted">{{ r.missing | join(", ") }}</span>{% else %}<span class="muted">Nothing assigned yet</span>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <p class="muted">No team members yet.</p>
+  {% endif %}
+</section>
+<div class="viz-tip" role="status" aria-live="polite" hidden><strong></strong><span></span></div>
+{% endblock %}

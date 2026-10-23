@@ -25,7 +25,9 @@
       {% for label, url in links %}<li><a href="{{ url }}" target="_blank" rel="noopener noreferrer">{{ label }}</a></li>{% endfor %}
     </ul>
     {% endif %}
-    {% if can_run %}<p><a href="{{ url_for('kt.edit_topic', code=account.code, topic_id=topic.id) }}">Edit topic</a></p>{% endif %}
+    <p>{% if can_run %}<a href="{{ url_for('kt.edit_topic', code=account.code, topic_id=topic.id) }}">Edit topic</a> · {% endif %}
+      {% if g.user.can_contribute(account) %}<a href="{{ url_for('doubts.new_question', code=account.code, topic_id=topic.id) }}">Raise a doubt about this topic</a> · {% endif %}
+      <a href="{{ url_for('doubts.doubt_list', code=account.code, show='all') }}">See doubts</a></p>
   </section>
 
   <section class="card" id="sessions">

@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Search · {{ account.code }} · {{ app_name }}{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('main.account_detail', code=account.code) }}">&larr; {{ account.name }}</a></p>
+<h1>Search <span class="muted">· {{ account.name }} ({{ account.code }})</span></h1>
+<form class="filters" method="get" action="{{ url_for('knowledge.search', code=account.code) }}">
+  <label>Look for<input name="q" value="{{ q }}" maxlength="100" placeholder="Topics, SOPs, transactions, glossary, doubts, documents" autofocus></label>
+  <button type="submit">Search</button>
+</form>
+{% if q and q | length < 2 %}<p class="muted">Type at least 2 characters.</p>{% endif %}
+{% if groups %}
+<p class="muted">{{ found }} result{{ "" if found == 1 else "s" }} for "{{ q }}".</p>
+{% for title, items in groups if items %}
+<section class="card">
+  <h2>{{ title }} <span class="tab-count">{{ items | length }}</span></h2>
+  <ul class="plain-list">
+    {% for label, url, extra in items %}
+    <li><a href="{{ url }}" {% if url.startswith('http') %}target="_blank" rel="noopener noreferrer"{% endif %}>{{ label }}</a>
+      {% if extra %}<span class="muted">· {{ extra }}</span>{% endif %}</li>
+    {% endfor %}
+  </ul>
+</section>
+{% endfor %}
+{% endif %}
+{% endblock %}

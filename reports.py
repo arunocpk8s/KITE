@@ -8,7 +8,7 @@ from datetime import datetime, time, timedelta
 from flask import Blueprint, Response, g, render_template, request
 
 from auth import login_required
-from models import TRANSITION_PHASES, Change, KTProject, KTTopic, ProjectTeamMember, Question, Sop, User
+from models import TRANSITION_PHASES, Change, KTProject, KTTopic, Onboarding, ProjectTeamMember, Question, Sop, User
 from projects import STAGES, project_state
 from transitions import current_phase
 from timeutil import IST, ist_today
@@ -175,6 +175,8 @@ def overview():
                "pct": round(100 * len(c.acked) / len(c.acks)) if c.acks else 100} for c in changes],
         doubts=stacked_bars([r for r in doubt_rows if r[1]], DOUBT_GROUPS),
         people=readiness(scope, today), series=SERIES, ramp=RAMP, today=today,
+        newcomers=Onboarding.query.filter(Onboarding.account_id.in_(ids), Onboarding.status != "CANCELLED")
+        .order_by(Onboarding.status, Onboarding.target_date).all() if ids else [],
     )
 
 

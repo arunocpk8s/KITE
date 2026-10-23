@@ -19,7 +19,13 @@
   <a class="button button-secondary" href="{{ url_for('transactions.catalogue', code=account.code) }}">Transactions ({{ phase4.transactions }})</a>
   <a class="button button-secondary" href="{{ url_for('transactions.change_log', code=account.code) }}">Change log ({{ phase4.changes }})</a>
   <a class="button button-secondary" href="{{ url_for('doubts.doubt_list', code=account.code) }}">Doubts ({{ phase4.open_doubts }} open)</a>
+  <a class="button button-secondary" href="{{ url_for('onboarding.index', code=account.code) }}">Onboarding</a>
+  <a class="button button-secondary" href="{{ url_for('knowledge.glossary', code=account.code) }}">Glossary</a>
   <a class="button button-secondary" href="{{ url_for('reports.overview', account=account.code) }}">Reports</a></p>
+<form class="filters" method="get" action="{{ url_for('knowledge.search', code=account.code) }}">
+  <label>Search this account<input name="q" maxlength="100" placeholder="Topics, SOPs, transactions, glossary, doubts, documents"></label>
+  <button type="submit">Search</button>
+</form>
 
 <section class="card">
   <div class="module-head">

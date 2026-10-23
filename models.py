@@ -905,6 +905,164 @@ class QuestionReply(db.Model):
     author = db.relationship("User")
 
 
+# --- Newcomer onboarding -------------------------------------------------------------------------
+PATH_ITEM_KINDS = {"TOPIC": "KT topic", "SOP": "SOP", "TRANSACTION": "Transaction", "LINK": "Document or link"}
+PROGRESS_STATUSES = {"READ": "Read", "UNDERSTOOD": "Understood", "NEEDS_HELP": "Needs help"}
+GLOSSARY_KINDS = {"TERM": "Term", "SYSTEM": "System", "CONTACT": "Contact", "FAQ": "FAQ"}
+
+
+class LearningPath(db.Model):
+    """An ordered list of what a newcomer in a role studies: KT topics, SOPs, transactions and documents."""
+
+    __tablename__ = "learning_paths"
+
+    id = db.Column(db.Integer, primary_key=True)
+    account_id = db.Column(db.Integer, db.ForeignKey("accounts.id"), nullable=False, index=True)
+    project_id = db.Column(db.Integer, db.ForeignKey("kt_projects.id"), index=True)
+    name = db.Column(db.String(200), nullable=False)
+    for_role = db.Column(db.String(120), nullable=False, default="")
+    description = db.Column(db.Text, nullable=False, default="")
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+
+    account = db.relationship("Account")
+    project = db.relationship("KTProject")
+    items = db.relationship("PathItem", back_populates="path", cascade="all, delete-orphan",
+                            order_by="(PathItem.position, PathItem.id)")
+    onboardings = db.relationship("Onboarding", back_populates="path")
+
+
+class PathItem(db.Model):
+    __tablename__ = "path_items"
+
+    id = db.Column(db.Integer, primary_key=True)
+    path_id = db.Column(db.Integer, db.ForeignKey("learning_paths.id"), nullable=False, index=True)
+    position = db.Column(db.Integer, nullable=False, default=0)
+    kind = db.Column(db.String(12), nullable=False)
+    topic_id = db.Column(db.Integer, db.ForeignKey("kt_topics.id"))
+    sop_id = db.Column(db.Integer, db.ForeignKey("sops.id"))
+    transaction_id = db.Column(db.Integer, db.ForeignKey("transactions.id"))
+    title = db.Column(db.String(200), nullable=False, default="")  # for links
+    url = db.Column(db.String(500), nullable=False, default="")  # for links
+    note = db.Column(db.Text, nullable=False, default="")
+    required = db.Column(db.Boolean, nullable=False, default=True)
+
+    path = db.relationship("LearningPath", back_populates="items")
+    topic = db.relationship("KTTopic")
+    sop = db.relationship("Sop")
+    transaction = db.relationship("Transaction")
+
+    @property
+    def kind_label(self):
+        return PATH_ITEM_KINDS[self.kind]
+
+    @property
+    def label(self):
+        if self.kind == "TOPIC" and self.topic:
+            return self.topic.title
+        if self.kind == "SOP" and self.sop:
+            return f"{self.sop.code} {self.sop.title}"
+        if self.kind == "TRANSACTION" and self.transaction:
+            return f"{self.transaction.code} {self.transaction.name}"
+        return self.title or self.url
+
+
+class Onboarding(db.Model):
+    """A newcomer following a learning path, with a buddy (SME) and a target date. ACTIVE -> READY
+    once every required item is understood and the newcomer has given reverse KT to the buddy."""
+
+    __tablename__ = "onboardings"
+
+    id = db.Column(db.Integer, primary_key=True)
+    account_id = db.Column(db.Integer, db.ForeignKey("accounts.id"), nullable=False, index=True)
+    path_id = db.Column(db.Integer, db.ForeignKey("learning_paths.id"), nullable=False, index=True)
+    newcomer_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    buddy_id = db.Column(db.Integer, db.ForeignKey("users.id"), index=True)
+    target_date = db.Column(db.Date)
+    status = db.Column(db.String(10), nullable=False, default="ACTIVE", index=True)
+    assigned_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    reverse_kt_at = db.Column(db.DateTime)
+    reverse_kt_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    reverse_kt_note = db.Column(db.Text, nullable=False, default="")
+    ready_at = db.Column(db.DateTime)
+    ready_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    cancel_reason = db.Column(db.Text, nullable=False, default="")
+
+    account = db.relationship("Account")
+    path = db.relationship("LearningPath", back_populates="onboardings")
+    newcomer = db.relationship("User", foreign_keys=[newcomer_id])
+    buddy = db.relationship("User", foreign_keys=[buddy_id])
+    assigned_by = db.relationship("User", foreign_keys=[assigned_by_id])
+    reverse_kt_by = db.relationship("User", foreign_keys=[reverse_kt_by_id])
+    ready_by = db.relationship("User", foreign_keys=[ready_by_id])
+    progress = db.relationship("OnboardingProgress", back_populates="onboarding", cascade="all, delete-orphan")
+
+    def progress_for(self, item):
+        return next((p for p in self.progress if p.item_id == item.id), None)
+
+    @property
+    def required_items(self):
+        return [i for i in self.path.items if i.required]
+
+    @property
+    def understood(self):
+        return sum(1 for i in self.required_items
+                   if (p := self.progress_for(i)) is not None and p.status == "UNDERSTOOD")
+
+    @property
+    def percent(self):
+        items = self.required_items
+        return round(100 * self.understood / len(items)) if items else 100
+
+    @property
+    def needs_help(self):
+        return [p for p in self.progress if p.status == "NEEDS_HELP"]
+
+    def is_late(self, today):
+        return self.status == "ACTIVE" and self.target_date is not None and today > self.target_date
+
+
+class OnboardingProgress(db.Model):
+    __tablename__ = "onboarding_progress"
+    __table_args__ = (db.UniqueConstraint("onboarding_id", "item_id", name="uq_onboarding_item"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    onboarding_id = db.Column(db.Integer, db.ForeignKey("onboardings.id"), nullable=False, index=True)
+    item_id = db.Column(db.Integer, db.ForeignKey("path_items.id"), nullable=False, index=True)
+    status = db.Column(db.String(12), nullable=False)
+    note = db.Column(db.Text, nullable=False, default="")
+    question_id = db.Column(db.Integer, db.ForeignKey("questions.id"))
+    updated_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+
+    onboarding = db.relationship("Onboarding", back_populates="progress")
+    item = db.relationship("PathItem")
+    question = db.relationship("Question")
+
+    @property
+    def status_label(self):
+        return PROGRESS_STATUSES[self.status]
+
+
+class GlossaryEntry(db.Model):
+    """Client terms, systems, contacts and FAQs a newcomer needs."""
+
+    __tablename__ = "glossary"
+
+    id = db.Column(db.Integer, primary_key=True)
+    account_id = db.Column(db.Integer, db.ForeignKey("accounts.id"), nullable=False, index=True)
+    kind = db.Column(db.String(10), nullable=False, default="TERM")
+    term = db.Column(db.String(200), nullable=False)
+    meaning = db.Column(db.Text, nullable=False)
+    updated_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    updated_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+
+    updated_by = db.relationship("User")
+
+    @property
+    def kind_label(self):
+        return GLOSSARY_KINDS[self.kind]
+
+
 @event.listens_for(KTEvent, "before_update")
 @event.listens_for(KTEvent, "before_delete")
 @event.listens_for(ProjectEvent, "before_update")

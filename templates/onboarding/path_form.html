@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}{{ "Edit learning path" if path else "Add learning path" }} · {{ account.code }} · {{ app_name }}{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('onboarding.path', code=account.code, path_id=path.id) if path else url_for('onboarding.index', code=account.code) }}">&larr;
+  {{ path.name if path else "Onboarding · " ~ account.name }}</a></p>
+<section class="card narrow-form">
+  <h2>{{ "Edit learning path" if path else "Add a learning path" }}</h2>
+  <form method="post" action="{{ url_for('onboarding.edit_path', code=account.code, path_id=path.id) if path else url_for('onboarding.new_path', code=account.code) }}" novalidate>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label for="name">Name</label>
+    <input id="name" name="name" value="{{ form.name }}" maxlength="200" placeholder="e.g. Accounts payable analyst" required autofocus>
+    {% if errors.name %}<p class="error">{{ errors.name }}</p>{% endif %}
+    <div class="row">
+      <div><label for="for_role">For role (optional)</label><input id="for_role" name="for_role" value="{{ form.for_role }}" maxlength="120" placeholder="e.g. AP analyst">
+        {% if errors.for_role %}<p class="error">{{ errors.for_role }}</p>{% endif %}</div>
+      <div><label for="project_id">Project (optional)</label>
+        <select id="project_id" name="project_id"><option value="">Whole account</option>
+          {% for p in projects %}<option value="{{ p.id }}" {% if form.project_id == p.id|string %}selected{% endif %}>{{ p.name }}</option>{% endfor %}</select>
+        {% if errors.project_id %}<p class="error">{{ errors.project_id }}</p>{% endif %}</div>
+    </div>
+    <label for="description">Description (optional)</label>
+    <textarea id="description" name="description" rows="3" maxlength="4000">{{ form.description }}</textarea>
+    {% if errors.description %}<p class="error">{{ errors.description }}</p>{% endif %}
+    <button type="submit">{{ "Save" if path else "Create path" }}</button>
+  </form>
+</section>
+{% endblock %}

@@ -22,6 +22,8 @@ from nextsteps import next_steps, upcoming_internal_sessions
 from reports import bp as reports_bp
 from transactions import bp as transactions_bp
 from transitions import bp as transitions_bp
+from knowledge import bp as knowledge_bp
+from onboarding import bp as onboarding_bp
 from auth import bp as auth_bp
 from auth import login_required
 from config import DEPARTMENTS, Config
@@ -82,6 +84,8 @@ def create_app(test_config=None):
     app.register_blueprint(doubts_bp)
     app.register_blueprint(reports_bp)
     app.register_blueprint(transitions_bp)
+    app.register_blueprint(onboarding_bp)
+    app.register_blueprint(knowledge_bp)
     app.jinja_env.filters["ist"] = format_ist
     app.jinja_env.filters["date"] = format_date
 

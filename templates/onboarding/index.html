@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Onboarding · {{ account.code }} · {{ app_name }}{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('main.account_detail', code=account.code) }}">&larr; {{ account.name }}</a></p>
+<h1>Newcomer onboarding <span class="muted">· {{ account.name }} ({{ account.code }})</span></h1>
+
+<section class="card">
+  <h2>{{ "Newcomers" if author else "My onboarding" }}</h2>
+  {% if onboardings %}
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Newcomer</th><th>Learning path</th><th>Buddy</th><th>Progress</th><th>Target</th><th>Status</th></tr></thead>
+    <tbody>
+      {% for ob in onboardings %}
+      <tr {% if ob.status == 'CANCELLED' %}class="inactive-row"{% endif %}>
+        <td><a href="{{ url_for('onboarding.view', code=account.code, onboarding_id=ob.id) }}">{{ ob.newcomer.full_name }}</a></td>
+        <td>{{ ob.path.name }}</td>
+        <td>{{ ob.buddy.full_name if ob.buddy else "—" }}</td>
+        <td><span class="progress progress-wide progress-animated" title="{{ ob.percent }}%"><span style="width: {{ ob.percent }}%"></span></span> {{ ob.understood }}/{{ ob.required_items | length }}
+          {% if ob.needs_help %}<span class="overdue">· needs help</span>{% endif %}</td>
+        <td {% if ob.is_late(today) %}class="overdue"{% endif %}>{{ ob.target_date | date or "—" }}</td>
+        <td><span class="ob-status ob-{{ ob.status }}">{{ {"ACTIVE": "Learning", "READY": "Ready", "CANCELLED": "Cancelled"}[ob.status] }}</span></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <p class="muted">No onboarding yet.</p>
+  {% endif %}
+</section>
+
+<section class="card">
+  <div class="module-head">
+    <h2>Learning paths</h2>
+    {% if author %}<a class="push-right" href="{{ url_for('onboarding.new_path', code=account.code) }}">Add learning path</a>{% endif %}
+  </div>
+  {% if paths %}
+  <ul class="plain-list">
+    {% for p in paths %}
+    <li><a href="{{ url_for('onboarding.path', code=account.code, path_id=p.id) }}"><strong>{{ p.name }}</strong></a>
+      {% if p.for_role %}<span class="muted">· for {{ p.for_role }}</span>{% endif %}
+      <span class="muted">· {{ p.items | length }} item{{ "" if p.items | length == 1 else "s" }}{% if p.project %} · {{ p.project.name }}{% endif %}</span></li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">No learning paths yet.{% if author %} A path lists, in order, the KT topics, SOPs, transactions and documents a newcomer in a role should study.{% endif %}</p>
+  {% endif %}
+</section>
+
+{% if manager and paths %}
+<section class="card narrow-form">
+  <h2>Assign a newcomer</h2>
+  <form method="post" action="{{ url_for('onboarding.assign', code=account.code) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="row">
+      <div><label for="newcomer_id">Newcomer</label>
+        <select id="newcomer_id" name="newcomer_id" required><option value="">Choose…</option>
+          {% for u in newcomers %}<option value="{{ u.id }}">{{ u.full_name }} ({{ u.role_label }})</option>{% endfor %}</select></div>
+      <div><label for="path_id">Learning path</label>
+        <select id="path_id" name="path_id" required><option value="">Choose…</option>
+          {% for p in paths %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}</select></div>
+    </div>
+    <div class="row">
+      <div><label for="buddy_id">Buddy (SME)</label>
+        <select id="buddy_id" name="buddy_id" required><option value="">Choose…</option>
+          {% for u in buddies %}<option value="{{ u.id }}">{{ u.full_name }} ({{ u.role_label }})</option>{% endfor %}</select></div>
+      <div><label for="target_date">Ready by</label><input id="target_date" name="target_date" type="date"></div>
+    </div>
+    <button type="submit">Assign and email them</button>
+  </form>
+</section>
+{% endif %}
+{% endblock %}

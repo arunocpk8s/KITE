@@ -4,8 +4,8 @@ from flask import url_for
 
 from kt import CONFIRMABLE
 from models import (
-    LOW_RATING, Change, ChangeAck, InternalSession, KTProject, KTReceiver, KTTopic, ProjectTeamMember, Question, Sop,
-    db,
+    LOW_RATING, Change, ChangeAck, InternalSession, KTProject, KTReceiver, KTTopic, Onboarding, ProjectTeamMember,
+    Question, Sop, db,
 )
 from projects import project_state
 from transitions import can_start, current_phase, sign_off_blockers
@@ -68,6 +68,19 @@ def next_steps(user, today=None):
                                     Question.status == "ANSWERED").all()):
         steps.append(_step(f"{q.code} has an answer: check it and resolve it, or reply",
                            url_for("doubts.question", code=q.account.code, question_id=q.id), q.account))
+
+    # Onboarding: as the newcomer, and as the buddy.
+    for ob in (Onboarding.query.filter(Onboarding.account_id.in_(ids), Onboarding.status == "ACTIVE",
+                                       (Onboarding.newcomer_id == user.id) | (Onboarding.buddy_id == user.id)).all()):
+        link = url_for("onboarding.view", code=ob.account.code, onboarding_id=ob.id)
+        left = len(ob.required_items) - ob.understood
+        if ob.newcomer_id == user.id and left:
+            steps.append(_step(f"Continue your learning path '{ob.path.name}': {left} item(s) left", link, ob.account,
+                               urgent=ob.is_late(today)))
+        if ob.buddy_id == user.id and not left:
+            text = (f"Mark {ob.newcomer.full_name} ready" if ob.reverse_kt_at
+                    else f"Hold and record {ob.newcomer.full_name}'s reverse KT")
+            steps.append(_step(text, link, ob.account))
 
     # As the SME delivering KT.
     now = utcnow()

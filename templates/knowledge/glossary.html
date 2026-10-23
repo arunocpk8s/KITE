@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Glossary · {{ account.code }} · {{ app_name }}{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('main.account_detail', code=account.code) }}">&larr; {{ account.name }}</a></p>
+<h1>Glossary and FAQ <span class="muted">· {{ account.name }} ({{ account.code }})</span></h1>
+
+<form class="filters" method="get" action="{{ url_for('knowledge.glossary', code=account.code) }}">
+  <label>Search<input name="q" value="{{ q }}" maxlength="100"></label>
+  <label>Show
+    <select name="kind" data-autosubmit><option value="">Everything</option>
+      {% for k, v in kinds.items() %}<option value="{{ k }}" {% if kind == k %}selected{% endif %}>{{ v }}</option>{% endfor %}</select>
+  </label>
+  <button type="submit">Search</button>
+</form>
+
+<section class="card">
+  {% if entries %}
+  <dl class="glossary">
+    {% for e in entries %}
+    <dt id="entry-{{ e.id }}"><span class="doc-type">{{ e.kind_label }}</span> {{ e.term }}</dt>
+    <dd><span class="description">{{ e.meaning }}</span>
+      {% if can_edit %}
+      <details>
+        <summary>Edit</summary>
+        <form method="post" action="{{ url_for('knowledge.edit_entry', code=account.code, entry_id=e.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <select name="kind" aria-label="Type">{% for k, v in kinds.items() %}<option value="{{ k }}" {% if e.kind == k %}selected{% endif %}>{{ v }}</option>{% endfor %}</select>
+          <input name="term" value="{{ e.term }}" maxlength="200" aria-label="Term">
+          <textarea name="meaning" rows="3" maxlength="4000" aria-label="Meaning">{{ e.meaning }}</textarea>
+          <button type="submit" class="small">Save</button>
+          <button type="submit" name="delete" value="1" class="small danger">Remove</button>
+        </form>
+      </details>
+      {% endif %}</dd>
+    {% endfor %}
+  </dl>
+  {% else %}
+  <p class="muted">{{ "Nothing matches." if q or kind else "No entries yet." }}</p>
+  {% endif %}
+</section>
+
+{% if can_edit %}
+<section class="card narrow-form">
+  <h2>Add an entry</h2>
+  <form method="post" action="{{ url_for('knowledge.add_entry', code=account.code) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="row">
+      <div><label for="kind">Type</label><select id="kind" name="kind">{% for k, v in kinds.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></div>
+      <div><label for="term">Term, system, contact or question</label><input id="term" name="term" maxlength="200" required></div>
+    </div>
+    <label for="meaning">Meaning or answer</label>
+    <textarea id="meaning" name="meaning" rows="3" maxlength="4000" required></textarea>
+    <button type="submit">Add</button>
+  </form>
+</section>
+{% endif %}
+{% endblock %}

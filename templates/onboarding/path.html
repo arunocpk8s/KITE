@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}{{ path.name }} · {{ account.code }} · {{ app_name }}{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('onboarding.index', code=account.code) }}">&larr; Onboarding · {{ account.name }}</a></p>
+<h1>{{ path.name }} {% if path.for_role %}<span class="muted">· for {{ path.for_role }}</span>{% endif %}</h1>
+{% if path.description %}<p class="description">{{ path.description }}</p>{% endif %}
+{% if author %}<p><a href="{{ url_for('onboarding.edit_path', code=account.code, path_id=path.id) }}">Edit path details</a></p>{% endif %}
+
+<section class="card" id="items">
+  <h2>What to study, in order</h2>
+  {% if path.items %}
+  <ol class="path-items">
+    {% for i in path.items %}
+    <li>
+      <span class="doc-type">{{ i.kind_label }}</span> <strong>{{ i.label }}</strong>
+      {% if not i.required %}<span class="muted">(optional)</span>{% endif %}
+      {% if i.note %}<br><span class="muted description">{{ i.note }}</span>{% endif %}
+      {% if author %}
+      <span class="item-actions">
+        {% for action, text in [("up", "Up"), ("down", "Down"), ("delete", "Remove")] %}
+        <form class="inline" method="post" action="{{ url_for('onboarding.change_item', code=account.code, path_id=path.id, item_id=i.id, action=action) }}" {% if action == 'delete' %}data-confirm="Remove this item from the path?"{% endif %}>
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button type="submit" class="link-button">{{ text }}</button>
+        </form>
+        {% endfor %}
+      </span>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ol>
+  {% else %}
+  <p class="muted">No items yet.</p>
+  {% endif %}
+  {% if author %}
+  <details {% if not path.items %}open{% endif %}>
+    <summary>Add an item</summary>
+    <form method="post" action="{{ url_for('onboarding.add_item', code=account.code, path_id=path.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="row">
+        <div><label for="kind">Type</label>
+          <select id="kind" name="kind">{% for k, v in kinds.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></div>
+        <div><label for="topic_id">KT topic</label>
+          <select id="topic_id" name="topic_id"><option value="">—</option>{% for t in topics %}<option value="{{ t.id }}">{{ t.title }}</option>{% endfor %}</select></div>
+      </div>
+      <div class="row">
+        <div><label for="sop_id">SOP</label>
+          <select id="sop_id" name="sop_id"><option value="">—</option>{% for s in sops %}<option value="{{ s.id }}">{{ s.code }} {{ s.title }}</option>{% endfor %}</select></div>
+        <div><label for="transaction_id">Transaction</label>
+          <select id="transaction_id" name="transaction_id"><option value="">—</option>{% for t in transactions %}<option value="{{ t.id }}">{{ t.code }} {{ t.name }}</option>{% endfor %}</select></div>
+      </div>
+      <div class="row">
+        <div><label for="title">Document title (for a link)</label><input id="title" name="title" maxlength="200"></div>
+        <div><label for="url">Document link</label><input id="url" name="url" maxlength="500" placeholder="https://...sharepoint.com/..."></div>
+      </div>
+      <label for="note">What to focus on (optional)</label>
+      <input id="note" name="note" maxlength="2000">
+      <label class="inline"><input type="checkbox" name="required" checked> Required for readiness</label>
+      <p class="hint">Pick the type, then fill in the matching field.</p>
+      <button type="submit" class="small">Add to path</button>
+    </form>
+  </details>
+  {% endif %}
+</section>
+
+{% if manager and path.items %}
+<section class="card narrow-form">
+  <h2>Assign this path to a newcomer</h2>
+  <form method="post" action="{{ url_for('onboarding.assign', code=account.code) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="path_id" value="{{ path.id }}">
+    <div class="row">
+      <div><label for="newcomer_id">Newcomer</label>
+        <select id="newcomer_id" name="newcomer_id" required><option value="">Choose…</option>
+          {% for u in newcomers %}<option value="{{ u.id }}">{{ u.full_name }}</option>{% endfor %}</select></div>
+      <div><label for="buddy_id">Buddy (SME)</label>
+        <select id="buddy_id" name="buddy_id" required><option value="">Choose…</option>
+          {% for u in buddies %}<option value="{{ u.id }}">{{ u.full_name }}</option>{% endfor %}</select></div>
+    </div>
+    <label for="target_date">Ready by</label><input id="target_date" name="target_date" type="date">
+    <button type="submit">Assign and email them</button>
+  </form>
+</section>
+{% endif %}
+{% endblock %}

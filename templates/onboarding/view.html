@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}{{ ob.newcomer.full_name }} · onboarding · {{ account.code }} · {{ app_name }}{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('onboarding.index', code=account.code) }}">&larr; Onboarding · {{ account.name }}</a></p>
+<h1>{{ "My learning path" if me_newcomer else ob.newcomer.full_name }} <span class="muted">· {{ ob.path.name }}</span>
+  <span class="ob-status ob-{{ ob.status }}">{{ {"ACTIVE": "Learning", "READY": "Ready", "CANCELLED": "Cancelled"}[ob.status] }}</span>
+  {% if ob.is_late(today) %}<span class="badge-breached">Past target date</span>{% endif %}</h1>
+
+<ol class="steps">
+  <li class="{{ 'step-done' if all_understood or ob.status == 'READY' }}"><strong>1. Study the path</strong><br><span class="muted">{{ ob.understood }}/{{ ob.required_items | length }} understood</span></li>
+  <li class="{{ 'step-done' if ob.reverse_kt_at }}"><strong>2. Reverse KT to the buddy</strong><br><span class="muted">{{ ob.reverse_kt_at | ist if ob.reverse_kt_at else "Not yet" }}</span></li>
+  <li class="{{ 'step-done' if ob.status == 'READY' }}"><strong>3. Ready</strong><br><span class="muted">{{ ob.ready_at | ist if ob.ready_at else "Not yet" }}</span></li>
+  <li><strong>Buddy</strong><br><span class="muted">{{ ob.buddy.full_name if ob.buddy else "—" }} · target {{ ob.target_date | date or "not set" }}</span></li>
+</ol>
+
+<div class="topic-layout">
+<div>
+  <section class="card">
+    <div class="module-head">
+      <h2>Learning path</h2>
+      <span class="progress progress-wide progress-animated"><span style="width: {{ ob.percent }}%"></span></span>
+      <span class="muted">{{ ob.percent }}%</span>
+    </div>
+    <ol class="path-items">
+      {% for i in ob.path.items %}
+      {% set p = ob.progress_for(i) %}
+      <li id="item-{{ i.id }}" class="{{ 'item-' ~ p.status if p }}">
+        <span class="doc-type">{{ i.kind_label }}</span>
+        {% if i.kind == "TOPIC" and i.topic %}<a href="{{ url_for('kt.topic', code=account.code, topic_id=i.topic_id) }}"><strong>{{ i.label }}</strong></a>
+        {% elif i.kind == "SOP" and i.sop %}<a href="{{ url_for('sops.sop', code=account.code, sop_id=i.sop_id) }}"><strong>{{ i.label }}</strong></a>
+        {% elif i.kind == "TRANSACTION" and i.transaction %}<a href="{{ url_for('transactions.transaction', code=account.code, txn_id=i.transaction_id) }}"><strong>{{ i.label }}</strong></a>
+        {% elif i.url %}<a href="{{ i.url }}" target="_blank" rel="noopener noreferrer"><strong>{{ i.label }}</strong></a>
+        {% else %}<strong>{{ i.label }}</strong>{% endif %}
+        {% if not i.required %}<span class="muted">(optional)</span>{% endif %}
+        {% if p %}<span class="progress-chip prog-{{ p.status }}">{{ p.status_label }}</span>{% endif %}
+        {% if p and p.question %}<a href="{{ url_for('doubts.question', code=account.code, question_id=p.question_id) }}">{{ p.question.code }} ({{ p.question.status_label | lower }})</a>{% endif %}
+        {% if i.note %}<br><span class="muted">{{ i.note }}</span>{% endif %}
+        {% if p and p.note %}<br><span class="description">{{ p.note }}</span>{% endif %}
+        {% if me_newcomer and ob.status == "ACTIVE" %}
+        <form class="item-form" method="post" action="{{ url_for('onboarding.update_item', code=account.code, onboarding_id=ob.id, item_id=i.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input name="note" maxlength="2000" placeholder="Note or what you are stuck on (optional)" aria-label="Note for {{ i.label }}">
+          {% for s, label in statuses.items() %}
+          <button type="submit" name="status" value="{{ s }}" class="small {{ 'danger' if s == 'NEEDS_HELP' }}">{{ label }}</button>
+          {% endfor %}
+        </form>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ol>
+  </section>
+</div>
+<div>
+  <section class="card card-soft card-steps">
+    <h2>Next</h2>
+    {% if ob.status == "READY" %}
+    <p><span class="tick">&#10003;</span> Ready since {{ ob.ready_at | ist }} ({{ ob.ready_by.full_name }}).</p>
+    {% elif ob.status == "CANCELLED" %}
+    <p class="muted">Cancelled. {{ ob.cancel_reason }}</p>
+    {% elif not all_understood %}
+    <p class="muted">{{ "Work through each item; mark it Understood when you could explain it, or Needs help to ask your buddy." if me_newcomer else "Waiting for the newcomer to understand every required item." }}</p>
+    {% elif not ob.reverse_kt_at %}
+    <p>Every required item is understood. Next: the newcomer explains it back to the buddy (reverse KT).</p>
+    {% if can_guide %}
+    <form method="post" action="{{ url_for('onboarding.reverse_kt', code=account.code, onboarding_id=ob.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label for="rk-note">How it went (optional)</label>
+      <textarea id="rk-note" name="note" rows="2" maxlength="2000"></textarea>
+      <button type="submit">Record reverse KT</button>
+    </form>
+    {% endif %}
+    {% else %}
+    <p>Reverse KT done {{ ob.reverse_kt_at | ist }} with {{ ob.reverse_kt_by.full_name }}.{% if ob.reverse_kt_note %} <span class="description">{{ ob.reverse_kt_note }}</span>{% endif %}</p>
+    {% if can_guide %}
+    <form method="post" action="{{ url_for('onboarding.mark_ready', code=account.code, onboarding_id=ob.id) }}" data-confirm="Mark {{ ob.newcomer.full_name }} ready?">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit">Mark {{ ob.newcomer.full_name }} ready</button>
+    </form>
+    {% endif %}
+    {% endif %}
+    {% if manager and ob.status == "ACTIVE" %}
+    <details>
+      <summary>Cancel this onboarding</summary>
+      <form method="post" action="{{ url_for('onboarding.cancel', code=account.code, onboarding_id=ob.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label for="reason">Reason</label><textarea id="reason" name="reason" rows="2" maxlength="2000" required></textarea>
+        <button type="submit" class="danger">Cancel onboarding</button>
+      </form>
+    </details>
+    {% endif %}
+  </section>
+  <section class="card">
+    <h2>Useful</h2>
+    <ul class="plain-list">
+      <li><a href="{{ url_for('knowledge.glossary', code=account.code) }}">Glossary and FAQ</a></li>
+      <li><a href="{{ url_for('transactions.catalogue', code=account.code) }}">Transaction catalogue</a></li>
+      <li><a href="{{ url_for('doubts.doubt_list', code=account.code, show='mine') }}">My doubts</a></li>
+    </ul>
+  </section>
+</div>
+</div>
+{% endblock %}

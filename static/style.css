@@ -295,3 +295,21 @@ form.inline { display: inline; }
 .phase-card-current { border-color: #b7d3f6; box-shadow: 0 0 0 3px var(--soft-blue); }
 .phase-actions { margin-top: 10px; padding-top: 8px; border-top: 1px solid #eef0f2; }
 .columns-5 { grid-template-columns: repeat(5, 1fr); }
+
+/* Onboarding and glossary */
+.path-items { padding-left: 22px; margin: 6px 0; }
+.path-items li { padding: 8px 4px; border-bottom: 1px solid #eef0f2; }
+.path-items li.item-UNDERSTOOD { background: linear-gradient(90deg, var(--soft-mint), transparent 60%); }
+.path-items li.item-NEEDS_HELP { background: linear-gradient(90deg, var(--soft-rose), transparent 60%); }
+.item-actions { margin-left: 8px; }
+.item-form { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 6px; }
+.item-form input { flex: 1; min-width: 180px; padding: 4px 6px; }
+.item-form button { margin-top: 0; }
+.progress-chip, .ob-status { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 0.78rem; font-weight: 600; }
+.prog-READ, .ob-ACTIVE { background: var(--soft-blue); color: #1c4e9d; }
+.prog-UNDERSTOOD, .ob-READY { background: var(--soft-mint); color: #1e6b34; }
+.prog-NEEDS_HELP { background: var(--soft-rose); color: #912018; }
+.ob-CANCELLED { background: #f3f4f6; color: #616e7c; }
+.glossary dt { font-weight: 700; margin-top: 12px; }
+.glossary dd { margin: 4px 0 8px 0; padding-bottom: 8px; border-bottom: 1px solid #eef0f2; }
+.meter-inline { display: inline-block; width: 90px; vertical-align: middle; }

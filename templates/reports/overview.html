@@ -175,5 +175,31 @@
   <p class="muted">No team members yet.</p>
   {% endif %}
 </section>
+<section class="card">
+  <h2>Newcomer readiness</h2>
+  {% if newcomers %}
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Newcomer</th><th>Account</th><th>Learning path</th><th>Buddy</th><th>Understood</th><th>Reverse KT</th><th>Target</th><th>Status</th></tr></thead>
+    <tbody>
+      {% for ob in newcomers %}
+      <tr>
+        <td><a href="{{ url_for('onboarding.view', code=ob.account.code, onboarding_id=ob.id) }}">{{ ob.newcomer.full_name }}</a></td>
+        <td>{{ ob.account.code }}</td>
+        <td>{{ ob.path.name }}</td>
+        <td>{{ ob.buddy.full_name if ob.buddy else "—" }}</td>
+        <td><span class="meter meter-inline"><span class="meter-fill bar-grow" style="width: {{ ob.percent }}%; --i: {{ loop.index0 }}"></span></span> {{ ob.percent }}%</td>
+        <td>{{ ob.reverse_kt_at | ist if ob.reverse_kt_at else "—" }}</td>
+        <td {% if ob.is_late(today) %}class="overdue"{% endif %}>{{ ob.target_date | date or "—" }}</td>
+        <td>{% if ob.status == "READY" %}<span class="ready-chip"><span class="tick">&#10003;</span> Ready</span>{% else %}Learning{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <p class="muted">No newcomers being onboarded.</p>
+  {% endif %}
+</section>
 <div class="viz-tip" role="status" aria-live="polite" hidden><strong></strong><span></span></div>
 {% endblock %}

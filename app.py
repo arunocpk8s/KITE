@@ -24,6 +24,7 @@ from transactions import bp as transactions_bp
 from transitions import bp as transitions_bp
 from knowledge import bp as knowledge_bp
 from onboarding import bp as onboarding_bp
+import tasks
 from auth import bp as auth_bp
 from auth import login_required
 from config import DEPARTMENTS, Config
@@ -86,6 +87,8 @@ def create_app(test_config=None):
     app.register_blueprint(transitions_bp)
     app.register_blueprint(onboarding_bp)
     app.register_blueprint(knowledge_bp)
+    app.register_blueprint(tasks.bp)
+    csrf.exempt(tasks.bp)  # called by a scheduler with a bearer secret, not a browser form
     app.jinja_env.filters["ist"] = format_ist
     app.jinja_env.filters["date"] = format_date
 
@@ -112,6 +115,7 @@ def create_app(test_config=None):
 
     register_cli(app)
     sops.register_cli(app)
+    tasks.register_cli(app)
     return app
 
 

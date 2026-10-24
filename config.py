@@ -155,3 +155,7 @@ class Config:
     # can still use a password, and every such login is recorded in the admin log.
     LOCAL_LOGIN_ENABLED = _bool("LOCAL_LOGIN_ENABLED", default=True)
     BREAK_GLASS_USERS = _csv("BREAK_GLASS_USERS")
+
+    # Shared secret for /tasks/daily-reminders (Vercel Cron sends it as "Authorization: Bearer ...").
+    # Empty = the URL is switched off; use the daily-reminders CLI command instead.
+    CRON_SECRET = os.environ.get("CRON_SECRET", "").strip()

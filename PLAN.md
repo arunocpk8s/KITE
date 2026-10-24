@@ -113,9 +113,9 @@ accounts** and sees only those accounts (FAXORA's team scoping, reused).
 | 2 | KT tracker: modules, topics, workflow, sessions, ratings, dashboard | **Done** (96 tests pass) |
 | 3 | Scope of work and SOPs with versions, approval and review dates; plus projects (below) | **Done** (117 tests pass) |
 | 4 | Transaction catalogue and change log with acknowledgements; doubts, next steps, reports | **Done** (126 tests pass) |
-| 5 | Transition phases and exit criteria with sign-off | Phase signed off |
-| 6 | Newcomer learning paths, progress, Q&A, readiness | Newcomer reaches *ready* |
-| 7 | Reports, reminders, documents (HLD/LLD/Runbook), own GitHub repo, test and Azure deployment | Pilot with one account |
+| 5 | Transition phases and exit criteria with sign-off | **Done** |
+| 6 | Newcomer learning paths, progress, Q&A, readiness; glossary and search | **Done** |
+| 7 | Reports, reminders, documents (HLD/LLD/Runbook/SSO/Components), own GitHub repo, test and Azure deployment | Reminders and documents **done**; GitHub, Vercel test and Azure pilot in progress |
 
 ## 6. Decisions and open questions
 

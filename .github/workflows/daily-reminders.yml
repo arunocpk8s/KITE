@@ -1,0 +1,26 @@
+# Calls the production site's daily reminder job at 08:00 IST. Set the repository secrets
+# KITE_URL (e.g. https://kite-prod.azurewebsites.net) and CRON_SECRET (same value as the app setting).
+# Without them the job does nothing. Vercel deployments use the cron in vercel.json instead.
+name: daily-reminders
+
+on:
+  schedule:
+    - cron: "30 2 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  remind:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call the reminder job
+        env:
+          KITE_URL: ${{ secrets.KITE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$KITE_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "KITE_URL or CRON_SECRET is not set; skipping."
+            exit 0
+          fi
+          curl --fail --silent --show-error -H "Authorization: Bearer $CRON_SECRET" "$KITE_URL/tasks/daily-reminders"

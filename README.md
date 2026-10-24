@@ -9,8 +9,9 @@ Developed by: **Arun Arumugam**
 The plan and build phases are in [PLAN.md](PLAN.md). **Done:** sign-in, client accounts, roles and
 the Admin console (phase 1); the KT tracker (phase 2); projects with hand-over checklist, client
 sign-off, internal KT and SharePoint KT documents; scope of work and SOPs (phase 3); transaction
-catalogue, change log with acknowledgements, doubts, "My next steps" and reports with charts (phase 4).
-Transition phases and newcomer onboarding follow in phases 5–6.
+catalogue, change log with acknowledgements, doubts, "My next steps" and reports with charts (phase 4);
+transition phases with exit criteria (phase 5); newcomer onboarding, glossary and search (phase 6);
+daily reminder emails, documentation and deployment set-up (phase 7).
 
 | Environment | Where | Database | Sign-in |
 |---|---|---|---|
@@ -76,6 +77,21 @@ owner, else the KT leads to assign). Answers email the asker; the asker resolves
 changes to acknowledge, doubts to answer or check, sessions to schedule or record, SOPs to fix or review,
 topics to sign off, projects needing client sign-off (including for the client approver).
 
+**Transition** (per project): Knowledge transfer → Shadow → Reverse shadow → Steady state. Each phase has
+planned and actual dates and exit criteria; it starts after the previous one is signed off, and a KT lead
+signs it off when every criterion is met (the KT phase also needs the client's KT sign-off).
+
+**Onboarding:** SMEs and KT leads build learning paths (KT topics, SOPs, transactions, document links).
+A KT lead assigns a path with a buddy and target date; the newcomer marks each item Read, Understood or
+Needs help (which raises a doubt for the buddy); after reverse KT the buddy marks them Ready. Each account
+also has a **glossary/FAQ** and one **search** across topics, SOPs, transactions, glossary, doubts and documents.
+
+**Daily reminders:** one email per person at 08:00 IST: sessions tomorrow, overdue topics, SOP reviews,
+changes to acknowledge, unanswered doubts, newcomers past their target date. Run
+`daily-reminders` from Task Scheduler, or set `CRON_SECRET` and let Vercel Cron (`vercel.json`) or the
+`daily-reminders` GitHub workflow (Azure; repository secrets `KITE_URL`, `CRON_SECRET`) call
+`/tasks/daily-reminders`. It sends at most once a day.
+
 **Reports** (`/reports`, per account or all): KT signed-off %, KT progress by project, sign-offs over
 the last 12 weeks, projects by stage, change acknowledgements, doubts, and a team readiness table
 (CSV export). Charts are drawn by KITE itself (no chart library or CDN), animate in, show values on
@@ -136,6 +152,7 @@ Every console action is written to the append-only `admin_events` table; passwor
 .venv\Scripts\python.exe -m flask --app app test-email you@company.com
 .venv\Scripts\python.exe -m flask --app app resend-failed
 .venv\Scripts\python.exe -m flask --app app sop-review-reminders --days 14
+.venv\Scripts\python.exe -m flask --app app daily-reminders            # add --force to send again today
 ```
 
 Run `sop-review-reminders` once a day (Task Scheduler on a PC, or a WebJob / scheduled task on Azure).
@@ -197,6 +214,12 @@ transactions.py transaction catalogue and change log with acknowledgements
 doubts.py     doubts (technical questions) with replies, assignment and resolution
 nextsteps.py  "My next steps" for the home page
 reports.py    reports page, chart data and team readiness CSV
+transitions.py transition phases and exit criteria
+onboarding.py learning paths, newcomers, reverse KT and readiness
+knowledge.py  glossary / FAQ and account search
+tasks.py      daily reminder digests (CLI and /tasks/daily-reminders)
+vercel.json   Vercel cron for the daily reminders (the app itself is set in pyproject.toml)
+docs/         HLD, LLD, Runbook, SSO plan, Components (Word + PDF; kept local, not in git)
 models.py     database models and the start-up schema upgrade
 notify.py     SMTP email sending, outbox and retry
 timeutil.py   UTC storage, IST display, time left, month ranges, add_months

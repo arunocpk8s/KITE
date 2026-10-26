@@ -10,6 +10,7 @@ from flask import Blueprint, abort, flash, g, redirect, render_template, request
 from sqlalchemy import func
 
 import notify
+import servicenow
 from auth import login_required
 from kt import members_of, visible_account_or_404
 from models import QUESTION_STATUSES, KTProject, KTTopic, Question, QuestionReply, Transaction, User, db
@@ -134,6 +135,7 @@ def question(code, question_id):
         "doubts/question.html", account=account, question=question, can_reply=g.user.can_contribute(account),
         can_resolve=question.asked_by_id == g.user.id or manager,
         can_assign=manager or question.assigned_to_id == g.user.id, answerers=_answerers(account),
+        kb_conn=servicenow.connection_for(account), can_publish=servicenow.can_publish(g.user, account),
     )
 
 

@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}ServiceNow · {{ app_name }}{% endblock %}
+{% block content %}
+{% with active = 'servicenow' %}{% include "admin/_tabs.html" %}{% endwith %}
+
+<p class="muted">Connect a client account to its ServiceNow instance. Doubts then show matching KB articles
+  (from the question and its answers), people can link the article that solves a doubt, and SMEs can publish
+  a solved doubt as a draft KB article.</p>
+<section class="card">
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Account</th><th>Instance</th><th>Knowledge base</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+      {% for a in accounts %}
+      {% set c = connections.get(a.id) %}
+      <tr {% if not a.active %}class="inactive-row"{% endif %}>
+        <td>{{ a.code }} <span class="muted">{{ a.name }}</span></td>
+        <td>{{ c.instance if c else "—" }}</td>
+        <td>{{ (c.knowledge_base or "All bases") if c else "—" }}</td>
+        <td>{% if not c %}<span class="muted">Not connected</span>{% elif c.enabled %}On{% else %}<span class="muted">Off</span>{% endif %}</td>
+        <td><a href="{{ url_for('admin.servicenow_edit', code=a.code) }}">{{ "Manage" if c else "Connect" }}</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% endblock %}

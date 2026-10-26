@@ -1,4 +1,5 @@
 // Small helpers: confirm forms marked with data-confirm, auto-submit filters marked with data-autosubmit,
+// load slow parts of a page (e.g. ServiceNow results) into elements marked with data-fragment,
 // and show chart tooltips for elements with data-tip-value / data-tip-label (on hover and keyboard focus).
 (function () {
   "use strict";
@@ -12,6 +13,17 @@
 
     document.querySelectorAll("select[data-autosubmit]").forEach(function (select) {
       select.addEventListener("change", function () { select.form.submit(); });
+    });
+
+    // The fragment is HTML rendered (and escaped) by KITE itself, from the same origin.
+    document.querySelectorAll("[data-fragment]").forEach(function (box) {
+      fetch(box.dataset.fragment, { credentials: "same-origin" })
+        .then(function (resp) {
+          if (!resp.ok) throw new Error(resp.status);
+          return resp.text();
+        })
+        .then(function (html) { box.innerHTML = html; })
+        .catch(function () { box.textContent = box.dataset.fragmentError || "Could not load this part."; });
     });
 
     var tip = document.querySelector(".viz-tip");

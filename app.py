@@ -24,6 +24,7 @@ from transactions import bp as transactions_bp
 from transitions import bp as transitions_bp
 from knowledge import bp as knowledge_bp
 from onboarding import bp as onboarding_bp
+import servicenow
 import tasks
 from auth import bp as auth_bp
 from auth import login_required
@@ -87,6 +88,7 @@ def create_app(test_config=None):
     app.register_blueprint(transitions_bp)
     app.register_blueprint(onboarding_bp)
     app.register_blueprint(knowledge_bp)
+    app.register_blueprint(servicenow.bp)
     app.register_blueprint(tasks.bp)
     csrf.exempt(tasks.bp)  # called by a scheduler with a bearer secret, not a browser form
     app.jinja_env.filters["ist"] = format_ist

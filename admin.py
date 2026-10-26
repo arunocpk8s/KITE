@@ -1,15 +1,17 @@
-"""Admin console: users, client accounts and members, mail server, email outbox. Admins only."""
+"""Admin console: users, client accounts and members, mail server, email outbox, ServiceNow. Admins only."""
 import re
 
 from flask import Blueprint, abort, current_app, flash, g, redirect, render_template, request, url_for
 from sqlalchemy import func
 
 import notify
+import servicenow
 from config import DEPARTMENTS
 from models import (
-    ROLE_LABELS, ROLES, Account, AccountMember, AdminEvent, EmailOutbox, Setting, User, add_admin_event, db,
-    delete_setting, set_setting,
+    ROLE_LABELS, ROLES, Account, AccountMember, AdminEvent, EmailOutbox, ServiceNowConnection, Setting, User,
+    add_admin_event, db, delete_setting, set_setting,
 )
+from timeutil import utcnow
 
 bp = Blueprint("admin", __name__, url_prefix="/admin")
 
@@ -518,3 +520,92 @@ def resend_all():
     db.session.commit()
     flash(f"Resent {sent} email(s); {pending} still pending.", "success" if not pending else "error")
     return redirect(url_for("admin.outbox"))
+
+
+# --- ServiceNow ------------------------------------------------------------------------------
+def _snow_instance(value):
+    """'https://acme.service-now.com/now/nav' -> 'acme.service-now.com'; 'demo' stays 'demo'."""
+    return value.strip().lower().split("://", 1)[-1].split("/", 1)[0]
+
+
+@bp.route("/servicenow")
+def servicenow_list():
+    connections = {c.account_id: c for c in ServiceNowConnection.query}
+    accounts = Account.query.order_by(Account.active.desc(), Account.code).all()
+    return render_template("admin/servicenow.html", accounts=accounts, connections=connections)
+
+
+def _account_by_code(code):
+    account = Account.query.filter_by(code=code).first()
+    if account is None:
+        abort(404)
+    return account
+
+
+@bp.route("/servicenow/<code>", methods=["GET", "POST"])
+def servicenow_edit(code):
+    account = _account_by_code(code)
+    conn = ServiceNowConnection.query.filter_by(account_id=account.id).first()
+    if request.method == "GET":
+        form = {"instance": conn.instance if conn else "", "username": conn.username if conn else "",
+                "knowledge_base": conn.knowledge_base if conn else "", "enabled": conn.enabled if conn else True}
+        return render_template("admin/servicenow_form.html", account=account, conn=conn, form=form, errors={})
+    form = {"instance": _snow_instance(request.form.get("instance", "")),
+            "username": request.form.get("username", "").strip(),
+            "knowledge_base": request.form.get("knowledge_base", "").strip().lower(),
+            "enabled": request.form.get("enabled") == "1"}
+    password = request.form.get("password", "")
+    demo = form["instance"] == servicenow.DEMO_INSTANCE
+    errors = {}
+    if not demo and (not HOST_RE.match(form["instance"]) or "." not in form["instance"]):
+        errors["instance"] = "Enter the instance host, e.g. acme.service-now.com (or demo for sample articles)."
+    if not demo and not form["username"]:
+        errors["username"] = "Enter the integration user's name."
+    if len(form["username"]) > 200:
+        errors["username"] = "At most 200 characters."
+    if not demo and not password and not (conn and conn.password_enc):
+        errors["password"] = "Enter the integration user's password."
+    if len(password) > 500:
+        errors["password"] = "Password is too long."
+    if form["knowledge_base"] and not servicenow.SYS_ID_RE.match(form["knowledge_base"]):
+        errors["knowledge_base"] = "A sys_id is 32 letters and digits (0-9, a-f); leave empty to search every base."
+    if errors:
+        return render_template("admin/servicenow_form.html", account=account, conn=conn, form=form,
+                               errors=errors), 400
+    if conn is None:
+        conn = ServiceNowConnection(account_id=account.id)
+        db.session.add(conn)
+    conn.instance, conn.username, conn.knowledge_base, conn.enabled = (
+        form["instance"], form["username"], form["knowledge_base"], form["enabled"])
+    if password:
+        conn.password_enc = notify.encrypt_secret(password)
+    conn.updated_at, conn.updated_by_id = utcnow(), g.user.id
+    add_admin_event(g.user, "SERVICENOW_UPDATED", account.code,
+                    f"instance {conn.instance}, user {conn.username or '(none)'}, "
+                    f"knowledge base {conn.knowledge_base or '(all)'}, {'on' if conn.enabled else 'off'}"
+                    + ("; password changed" if password else ""))
+    db.session.commit()
+    flash(f"ServiceNow settings for {account.code} saved. Test the connection to check them.", "success")
+    return redirect(url_for("admin.servicenow_edit", code=account.code))
+
+
+@bp.route("/servicenow/<code>/test", methods=["POST"])
+def servicenow_test(code):
+    account = _account_by_code(code)
+    conn = ServiceNowConnection.query.filter_by(account_id=account.id).first_or_404()
+    try:
+        flash(servicenow.check_connection(conn), "success")
+    except servicenow.ServiceNowError as err:
+        flash(f"Connection failed: {err}", "error")
+    return redirect(url_for("admin.servicenow_edit", code=account.code))
+
+
+@bp.route("/servicenow/<code>/remove", methods=["POST"])
+def servicenow_remove(code):
+    account = _account_by_code(code)
+    conn = ServiceNowConnection.query.filter_by(account_id=account.id).first_or_404()
+    db.session.delete(conn)
+    add_admin_event(g.user, "SERVICENOW_REMOVED", account.code, conn.instance)
+    db.session.commit()
+    flash(f"ServiceNow connection for {account.code} removed. Linked KB articles stay on the doubts.", "success")
+    return redirect(url_for("admin.servicenow_list"))

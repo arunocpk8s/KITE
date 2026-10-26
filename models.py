@@ -878,6 +878,8 @@ class Question(db.Model):
     assigned_to = db.relationship("User", foreign_keys=[assigned_to_id])
     replies = db.relationship("QuestionReply", back_populates="question", order_by="QuestionReply.id",
                               cascade="all, delete-orphan")
+    kb_links = db.relationship("QuestionKBLink", back_populates="question", order_by="QuestionKBLink.id",
+                               cascade="all, delete-orphan")
 
     @property
     def code(self):
@@ -903,6 +905,54 @@ class QuestionReply(db.Model):
 
     question = db.relationship("Question", back_populates="replies")
     author = db.relationship("User")
+
+
+# --- ServiceNow knowledge base -------------------------------------------------------------------
+KB_LINK_SOURCES = {"LINKED": "Linked", "PUBLISHED": "Published from KITE"}
+
+
+class ServiceNowConnection(db.Model):
+    """The client's ServiceNow instance, used to find KB articles for doubts and to publish solutions
+    as draft articles. One per account; set in the admin console. The password is stored encrypted."""
+
+    __tablename__ = "servicenow_connections"
+
+    id = db.Column(db.Integer, primary_key=True)
+    account_id = db.Column(db.Integer, db.ForeignKey("accounts.id"), nullable=False, unique=True)
+    # Host name such as acme.service-now.com, or "demo" for built-in sample articles.
+    instance = db.Column(db.String(200), nullable=False)
+    username = db.Column(db.String(200), nullable=False, default="")
+    password_enc = db.Column(db.Text, nullable=False, default="")
+    # sys_id of the knowledge base: limits suggestions to it and receives published drafts. Optional.
+    knowledge_base = db.Column(db.String(32), nullable=False, default="")
+    enabled = db.Column(db.Boolean, nullable=False, default=True)
+    updated_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    updated_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+
+    account = db.relationship("Account")
+
+
+class QuestionKBLink(db.Model):
+    """A ServiceNow KB article that holds the solution to a doubt (linked, or published from it)."""
+
+    __tablename__ = "question_kb_links"
+    __table_args__ = (db.UniqueConstraint("question_id", "number", name="uq_question_kb"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    question_id = db.Column(db.Integer, db.ForeignKey("questions.id"), nullable=False, index=True)
+    number = db.Column(db.String(20), nullable=False)
+    title = db.Column(db.String(300), nullable=False, default="")
+    url = db.Column(db.String(500), nullable=False)
+    source = db.Column(db.String(10), nullable=False, default="LINKED")
+    added_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    added_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+
+    question = db.relationship("Question", back_populates="kb_links")
+    added_by = db.relationship("User")
+
+    @property
+    def source_label(self):
+        return KB_LINK_SOURCES.get(self.source, self.source)
 
 
 # --- Newcomer onboarding -------------------------------------------------------------------------

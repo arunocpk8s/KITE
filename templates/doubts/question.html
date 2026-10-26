@@ -31,6 +31,58 @@
     </form>
     {% endif %}
   </section>
+
+  {% if kb_conn %}
+  <section class="card" id="kb">
+    <h2>ServiceNow knowledge</h2>
+    {% if question.kb_links %}
+    <ul class="plain-list">
+      {% for k in question.kb_links %}
+      <li><a href="{{ k.url }}" {% if k.url.startswith('http') %}target="_blank" rel="noopener noreferrer"{% endif %}>{{ k.number }} {{ k.title }}</a>
+        <span class="muted">· {{ k.source_label }} by {{ k.added_by.full_name }}</span>
+        {% if can_reply %}
+        <form class="inline-form" method="post" action="{{ url_for('kb.unlink', code=account.code, question_id=question.id, link_id=k.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="small button-secondary">Remove</button>
+        </form>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="muted">No KB article is linked to this doubt yet.</p>
+    {% endif %}
+
+    <h3>Suggested articles</h3>
+    <div data-fragment="{{ url_for('kb.suggestions', code=account.code, question_id=question.id) }}"
+         data-fragment-error="Could not load suggestions from ServiceNow.">
+      <p class="muted">Looking in ServiceNow…</p>
+    </div>
+
+    {% if can_reply %}
+    <form class="filters" method="post" action="{{ url_for('kb.link', code=account.code, question_id=question.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label>Link an article by number<input name="number" maxlength="20" placeholder="KB0010001" required></label>
+      <button type="submit" class="small">Link</button>
+    </form>
+    {% endif %}
+    {% if can_publish and not question.kb_links | selectattr('source', 'equalto', 'PUBLISHED') | list %}
+    <form method="post" action="{{ url_for('kb.publish', code=account.code, question_id=question.id) }}"
+          data-confirm="Create a draft KB article in ServiceNow from this doubt and its answers?">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="button-secondary">Publish the solution as a KB draft</button>
+      <p class="hint">The doubt becomes the problem and the answers the solution. It goes live after the knowledge base's usual review.</p>
+    </form>
+    {% endif %}
+  </section>
+  {% else %}
+  <section class="card" id="kb">
+    <h2>ServiceNow knowledge</h2>
+    <p class="muted">This account is not connected to ServiceNow, so no KB articles are suggested.
+      {% if g.user.is_admin %}<a href="{{ url_for('admin.servicenow_edit', code=account.code) }}">Connect it</a> (use <code>demo</code> to try sample articles).
+      {% else %}Ask an admin to connect it.{% endif %}</p>
+  </section>
+  {% endif %}
 </div>
 <div>
   <section class="card">

@@ -22,4 +22,13 @@
 </section>
 {% endfor %}
 {% endif %}
+{% if kb_conn %}
+<section class="card">
+  <h2>ServiceNow knowledge base</h2>
+  <div data-fragment="{{ url_for('kb.search', code=account.code, q=q) }}"
+       data-fragment-error="Could not search ServiceNow.">
+    <p class="muted">Searching ServiceNow…</p>
+  </div>
+</section>
+{% endif %}
 {% endblock %}

@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}ServiceNow · {{ account.code }} · {{ app_name }}{% endblock %}
+{% block content %}
+{% with active = 'servicenow' %}{% include "admin/_tabs.html" %}{% endwith %}
+<p><a href="{{ url_for('admin.servicenow_list') }}">&larr; ServiceNow</a></p>
+<h2>{{ account.code }} <span class="muted">{{ account.name }}</span></h2>
+
+{% if conn %}
+<section class="card">
+  <h2>Test the connection</h2>
+  <form method="post" action="{{ url_for('admin.servicenow_test', code=account.code) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit">Test connection</button>
+  </form>
+</section>
+{% endif %}
+
+<section class="card">
+  <h2>ServiceNow instance</h2>
+  <form method="post" action="{{ url_for('admin.servicenow_edit', code=account.code) }}" novalidate autocomplete="off">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label for="instance">Instance</label>
+    <input id="instance" name="instance" value="{{ form.instance }}" maxlength="200" placeholder="acme.service-now.com">
+    <p class="hint">The host name, or <code>demo</code> to try the feature with built-in sample articles (nothing is sent anywhere).</p>
+    {% if errors.instance %}<p class="error">{{ errors.instance }}</p>{% endif %}
+    <div class="row">
+      <div>
+        <label for="username">Integration user</label>
+        <input id="username" name="username" value="{{ form.username }}" maxlength="200" autocomplete="off">
+        <p class="hint">A ServiceNow user with the <code>knowledge</code> role (read articles, create drafts) and REST access.</p>
+        {% if errors.username %}<p class="error">{{ errors.username }}</p>{% endif %}
+      </div>
+      <div>
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" autocomplete="new-password"
+               placeholder="{{ 'Leave empty to keep the current password' if conn and conn.password_enc else 'Not set' }}">
+        <p class="hint">Stored encrypted; never shown.</p>
+        {% if errors.password %}<p class="error">{{ errors.password }}</p>{% endif %}
+      </div>
+    </div>
+    <label for="knowledge_base">Knowledge base sys_id (optional)</label>
+    <input id="knowledge_base" name="knowledge_base" value="{{ form.knowledge_base }}" maxlength="32" placeholder="32 characters, from the knowledge base record">
+    <p class="hint">Limits suggestions to this knowledge base and receives published drafts. Without it, KITE searches every base and cannot publish.</p>
+    {% if errors.knowledge_base %}<p class="error">{{ errors.knowledge_base }}</p>{% endif %}
+    <label class="inline"><input type="checkbox" name="enabled" value="1" {% if form.enabled %}checked{% endif %}> Switched on for this account</label>
+    <button type="submit">Save</button>
+  </form>
+</section>
+
+{% if conn %}
+<form method="post" action="{{ url_for('admin.servicenow_remove', code=account.code) }}" data-confirm="Remove the ServiceNow connection of {{ account.code }}?">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <button type="submit" class="danger">Remove connection</button>
+</form>
+{% endif %}
+{% endblock %}

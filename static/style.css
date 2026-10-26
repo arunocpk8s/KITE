@@ -76,6 +76,9 @@ th { background: var(--primary-soft); color: var(--ink); }
 .tabs a { padding: 8px 14px; color: #52606d; text-decoration: none; border-bottom: 3px solid transparent; margin-bottom: -2px; }
 .tabs a.active { color: var(--ink); font-weight: 700; border-bottom-color: var(--accent); }
 .push-right { margin-left: auto; }
+/* A button in a tab row (e.g. "Raise a doubt") keeps the button look, not the tab link's grey text. */
+.tabs a.button { margin-top: 0; margin-bottom: 6px; border-bottom: 0; color: #fff; }
+.tabs a.button:hover { background: var(--primary-dark); }
 .inactive-row td { color: #9aa5b1; }
 .mail-status { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 0.8rem; background: #e4e7eb; }
 .mail-PENDING { background: #fff4d6; }
@@ -313,3 +316,7 @@ form.inline { display: inline; }
 .glossary dt { font-weight: 700; margin-top: 12px; }
 .glossary dd { margin: 4px 0 8px 0; padding-bottom: 8px; border-bottom: 1px solid #eef0f2; }
 .meter-inline { display: inline-block; width: 90px; vertical-align: middle; }
+
+/* ServiceNow KB suggestions */
+.kb-list li { margin-bottom: 12px; }
+.kb-list p { margin: 2px 0 4px; }

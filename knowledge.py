@@ -3,6 +3,7 @@ glossary, doubts and KT documents. SMEs and KT leads edit the glossary; every me
 from flask import Blueprint, abort, flash, g, redirect, render_template, request, url_for
 from sqlalchemy import or_
 
+import servicenow
 from auth import login_required
 from kt import visible_account_or_404
 from models import (
@@ -129,4 +130,5 @@ def search(code):
             ("KT documents", [(d.title, d.url, d.doc_type) for d in docs]),
         ]
     return render_template("knowledge/search.html", account=account, q=q, groups=groups,
-                           found=sum(len(items) for _, items in groups))
+                           found=sum(len(items) for _, items in groups),
+                           kb_conn=servicenow.connection_for(account) if len(q) >= 2 else None)

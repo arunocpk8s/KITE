@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}{{ article.number }} · {{ app_name }}{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('main.account_detail', code=account.code) }}">&larr; {{ account.name }}</a></p>
+<h1>{{ article.number }} {{ article.short_description }}</h1>
+<p class="muted">Sample ServiceNow article (demo mode) · updated {{ article.sys_updated_on[:10] }}</p>
+<section class="card">
+  {# Built-in sample text, not user input. #}
+  {{ article.text | safe }}
+</section>
+{% endblock %}

@@ -1,0 +1,12 @@
+{% if error %}
+<p class="error">{{ error }}</p>
+{% elif articles %}
+<ul class="plain-list">
+  {% for a in articles %}
+  <li><a href="{{ a.url }}" {% if a.url.startswith('http') %}target="_blank" rel="noopener noreferrer"{% endif %}>{{ a.number }} {{ a.title }}</a>
+    {% if a.snippet %}<span class="muted">· {{ a.snippet }}</span>{% endif %}</li>
+  {% endfor %}
+</ul>
+{% else %}
+<p class="muted">No published ServiceNow article matches.</p>
+{% endif %}

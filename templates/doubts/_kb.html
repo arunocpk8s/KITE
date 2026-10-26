@@ -1,0 +1,23 @@
+{% if error %}
+<p class="error">{{ error }}</p>
+{% elif articles %}
+<ul class="plain-list kb-list">
+  {% for a in articles %}
+  <li>
+    <a href="{{ a.url }}" {% if a.url.startswith('http') %}target="_blank" rel="noopener noreferrer"{% endif %}>{{ a.number }} {{ a.title }}</a>
+    {% if a.updated %}<span class="muted">· updated {{ a.updated }}</span>{% endif %}
+    {% if a.snippet %}<p class="muted">{{ a.snippet }}</p>{% endif %}
+    {% if can_link %}
+    <form class="inline-form" method="post" action="{{ url_for('kb.link', code=account.code, question_id=question.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="number" value="{{ a.number }}">
+      <button type="submit" class="small">This solves it: link</button>
+    </form>
+    {% endif %}
+  </li>
+  {% endfor %}
+</ul>
+<p class="hint">Matched on: {{ words | join(", ") }}. Suggestions follow the answers, so they improve once the doubt is answered.</p>
+{% else %}
+<p class="muted">No published article matches{% if words %} {{ words | join(", ") }}{% endif %}.</p>
+{% endif %}

@@ -2,12 +2,14 @@
 import logging
 import os
 import re
+import time
 import traceback
 
 import click
 from flask import Blueprint, Flask, abort, current_app, g, jsonify, redirect, render_template, request, url_for
 from flask_wtf.csrf import CSRFProtect
 from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 import activity
@@ -101,8 +103,7 @@ def create_app(test_config=None):
     app.jinja_env.filters["ago"] = activity.time_ago
 
     with app.app_context():
-        db.create_all()
-        upgrade_schema()
+        prepare_database()
 
     # Company logo: drop logo.svg / logo.png / logo.jpg into static/ to show it in the header.
     logo = next(
@@ -126,6 +127,22 @@ def create_app(test_config=None):
     sops.register_cli(app)
     tasks.register_cli(app)
     return app
+
+
+def prepare_database(attempts=4, wait=1.0):
+    """Create what is missing. Copies of the app starting together (hosted, after a release with new tables) can
+    collide; the one that loses finds the work done when it tries again, rather than staying down."""
+    for attempt in range(1, attempts + 1):
+        try:
+            db.create_all()
+            upgrade_schema()
+            return
+        except DBAPIError:
+            db.session.rollback()
+            if attempt == attempts:
+                raise
+            logging.getLogger(__name__).warning("Database set-up collided (attempt %d); trying again.", attempt)
+            time.sleep(wait * attempt)
 
 
 def register_cli(app):

@@ -1,6 +1,9 @@
 """The home page: insights, recent activity, search across workspaces and the template gallery."""
 from datetime import datetime, timedelta
 
+import pytest
+from sqlalchemy.exc import ProgrammingError
+
 import activity
 from conftest import account_id, login, user_id
 from models import Account, KTDocument, Question, db
@@ -74,6 +77,28 @@ def test_activity_by_day_uses_ist_days_and_a_fixed_window(app, client):
         assert days[-1]["count"] == activity.activity_by_day(accounts, today=today + timedelta(days=7))[-8]["count"]
         assert sum(d["count"] for d in activity.activity_by_day(accounts, today=today + timedelta(days=30))) == 0
         assert activity.activity_by_day([])[-1]["count"] == 0
+
+
+def test_database_setup_survives_a_collision_with_another_copy_starting(app, monkeypatch):
+    import app as app_module
+    calls = []
+
+    def collide(times):
+        def create_all():
+            calls.append(1)
+            if len(calls) <= times:
+                raise ProgrammingError("CREATE TABLE doc_folders", {}, Exception("already exists"))
+        return create_all
+
+    with app.app_context():
+        monkeypatch.setattr(db, "create_all", collide(1))
+        app_module.prepare_database(wait=0)
+        assert len(calls) == 2
+        calls.clear()
+        monkeypatch.setattr(db, "create_all", collide(99))
+        with pytest.raises(ProgrammingError):  # a real problem is still reported
+            app_module.prepare_database(attempts=2, wait=0)
+        assert len(calls) == 2
 
 
 def test_time_ago():

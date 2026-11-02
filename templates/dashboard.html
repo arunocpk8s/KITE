@@ -102,7 +102,8 @@
 
     <section class="card">
       <h2>Activity</h2>
-      <p class="viz-sub">{{ daily | sum(attribute="count") }} actions in the last {{ daily | length }} days</p>
+      {% set actions = daily | sum(attribute="count") %}
+      <p class="viz-sub">{{ actions }} action{{ "" if actions == 1 else "s" }} in the last {{ daily | length }} days</p>
       <div class="columns columns-days">
         {% for d in daily %}
         <div class="col" tabindex="0" data-tip-value="{{ d.count }} action{{ '' if d.count == 1 else 's' }}" data-tip-label="{{ d.date }}">

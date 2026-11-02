@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}{{ title or "New document" }} · {{ account.code }} · {{ app_name }}{% endblock %}
+{% block content %}
+<form class="doc-form" method="post" data-doc-form
+      action="{{ url_for('documents.edit', code=account.code, doc_id=doc.id) if doc else url_for('documents.new', code=account.code) }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  {% if doc %}<input type="hidden" name="base" value="{{ base }}">{% endif %}
+  <div class="doc-bar">
+    <a href="{{ url_for('documents.view', code=account.code, doc_id=doc.id) if doc else url_for('documents.workspace', code=account.code) }}">&larr; Back</a>
+    <select name="folder_id" aria-label="Folder">
+      <option value="">No folder</option>
+      {% for f in folders %}<option value="{{ f.id }}" {% if f.id | string == folder_id | string %}selected{% endif %}>{{ f.name }}</option>{% endfor %}
+    </select>
+    <button type="submit" class="push-right">Save</button>
+  </div>
+  {% if error %}<p class="flash flash-error">{{ error }}</p>{% endif %}
+
+  <div class="doc-toolbar" role="toolbar" aria-label="Formatting" hidden>
+    <button type="button" data-block="h1">H1</button>
+    <button type="button" data-block="h2">H2</button>
+    <button type="button" data-block="p">Text</button>
+    <span class="doc-toolbar-gap"></span>
+    <button type="button" data-cmd="bold"><strong>B</strong></button>
+    <button type="button" data-cmd="italic"><em>I</em></button>
+    <button type="button" data-cmd="underline"><u>U</u></button>
+    <span class="doc-toolbar-gap"></span>
+    <button type="button" data-cmd="insertUnorderedList">Bullets</button>
+    <button type="button" data-cmd="insertOrderedList">Numbers</button>
+    <button type="button" data-block="blockquote">Quote</button>
+    <button type="button" data-block="pre">Code</button>
+    <span class="doc-toolbar-gap"></span>
+    <button type="button" data-insert="table">Table</button>
+    <button type="button" data-insert="link">Link</button>
+    <button type="button" data-insert="embed">Embed link</button>
+  </div>
+
+  <div class="doc-paper">
+    <input class="doc-title" name="title" value="{{ title }}" maxlength="200" placeholder="Untitled" aria-label="Title" required {% if not doc %}autofocus{% endif %}>
+    <div class="doc-body doc-editor" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Document" hidden></div>
+    <textarea class="doc-source" name="body" rows="20" aria-label="Document HTML">{{ body }}</textarea>
+  </div>
+</form>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='documents.js') }}"></script>{% endblock %}

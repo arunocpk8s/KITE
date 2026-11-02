@@ -1,109 +1,172 @@
 {% extends "base.html" %}
-{% block title %}My accounts · {{ app_name }}{% endblock %}
+{% block title %}Home · {{ app_name }}{% endblock %}
+{% block main_class %}main-flush{% endblock %}
 {% block content %}
-<h1 class="greeting">Hello, {{ g.user.full_name.split(' ')[0] }}</h1>
-
-<nav class="track-grid" aria-label="Tracks">
-  <a class="track-button" href="{{ url_for('main.track', track='CLIENT_KT') }}">
-    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v16"/><path d="M15 10h4a1 1 0 0 1 1 1v10"/><path d="M2 21h20"/><path d="M8 8h3M8 12h3M8 16h3"/></svg>
-    <span>{{ tracks.CLIENT_KT }}</span>
-    <svg class="track-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
-  </a>
-  <a class="track-button" href="{{ url_for('main.track', track='INTERNAL_KT') }}">
-    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M12 11v5M9.5 13.5h5"/></svg>
-    <span>{{ tracks.INTERNAL_KT }}</span>
-    <svg class="track-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
-  </a>
-</nav>
-
-<div class="home-grid">
-<section class="card card-soft card-steps">
-  <h2>My next steps {% if steps %}<span class="tab-count">{{ steps | length }}</span>{% endif %}</h2>
-  {% if steps %}
-  <ul class="steps-list">
-    {% for s in steps[:15] %}
-    <li class="{{ 'step-urgent' if s.urgent }}" style="--i: {{ loop.index0 }}">
-      <a href="{{ s.url }}">{{ s.text }}</a> <span class="account-chip">{{ s.account }}</span>
-      {% if s.urgent %}<span class="badge-breached">Urgent</span>{% endif %}
-    </li>
-    {% endfor %}
-  </ul>
-  {% if steps | length > 15 %}<p class="hint">and {{ steps | length - 15 }} more.</p>{% endif %}
-  {% else %}
-  <p class="muted">Nothing is waiting on you. Stuck on something? Raise a doubt from your account's page and an SME will answer it.</p>
-  {% endif %}
-</section>
-
-<section class="card card-soft card-sessions">
-  <h2>Coming up</h2>
-  {% if upcoming or internal %}
-  <ul class="plain-list">
-    {% for s in upcoming %}
-    <li><strong>{{ s.starts_at | ist }}</strong> · KT ·
-      <a href="{{ url_for('kt.topic', code=s.topic.account.code, topic_id=s.topic.id) }}">{{ s.topic.title }}</a>
-      <span class="account-chip">{{ s.topic.account.code }}</span>
-      {% if s.meeting_link %} · <a href="{{ s.meeting_link }}" target="_blank" rel="noopener noreferrer">Join</a>{% endif %}</li>
-    {% endfor %}
-    {% for s in internal %}
-    <li><strong>{{ s.starts_at | ist }}</strong> · Internal KT ·
-      <a href="{{ url_for('projects.project', code=s.project.account.code, project_id=s.project_id) }}#internal">{{ s.project.name }}</a>
-      <span class="account-chip">{{ s.project.account.code }}</span> <span class="muted">by {{ s.presenter.full_name }}</span>
-      {% if s.meeting_link %} · <a href="{{ s.meeting_link }}" target="_blank" rel="noopener noreferrer">Join</a>{% endif %}</li>
-    {% endfor %}
-  </ul>
-  {% else %}
-  <p class="muted">No sessions scheduled for you.</p>
-  {% endif %}
-</section>
-</div>
-
-{% if my_topics %}
-<section class="card">
-  <h2>My KT topics</h2>
-  <div class="table-wrap">
-  <table>
-    <thead><tr><th>Topic</th><th>Account</th><th>My part</th><th>Status</th><th>Target sign-off</th></tr></thead>
-    <tbody>
-      {% for t in my_topics %}
-      <tr>
-        <td><a href="{{ url_for('kt.topic', code=t.account.code, topic_id=t.id) }}">{{ t.title }}</a></td>
-        <td>{{ t.account.code }}</td>
-        <td>{{ "SME" if t.sme_id == g.user.id else "Receiver" }}</td>
-        <td><span class="kt-status kt-{{ t.status }}">{{ t.status_label }}</span></td>
-        <td>{{ t.due_date | date or "—" }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+{% from "icons.html" import icon %}
+<header class="home-hero">
+  <div class="home-hero-top">
+    <span class="home-org"><span class="home-org-mark" aria-hidden="true">{{ app_name[:1] }}</span>{{ app_name }}</span>
+    <span class="home-hi">Hi {{ g.user.full_name.split(' ')[0] }}!</span>
   </div>
-</section>
-{% endif %}
+  <form class="home-search" method="get" action="{{ url_for('main.search_all') }}" role="search">
+    {{ icon("search") }}
+    <input name="q" maxlength="100" aria-label="Search" placeholder="Search documents, SOPs, KT topics and workspaces...">
+  </form>
+</header>
 
-<h2 class="section-title">My accounts</h2>
-{% if accounts %}
-<section class="account-grid">
-  {% for a, stats in accounts %}
-  <a class="account-card account-tint-{{ loop.index0 % 4 }}" href="{{ url_for('main.account_detail', code=a.code) }}" style="--i: {{ loop.index0 }}">
-    <span class="account-code">{{ a.code }}</span>
-    <span class="account-name">{{ a.name }}</span>
-    {% if a.description %}<span class="muted account-desc">{{ a.description | truncate(140) }}</span>{% endif %}
-    {% if stats.total %}
-    <span class="progress progress-animated" title="{{ stats.progress }}% of KT topics signed off"><span style="width: {{ stats.progress }}%"></span></span>
-    <span class="muted">KT {{ stats.signed_off }}/{{ stats.total }} signed off{% if stats.overdue %} · <span class="overdue">{{ stats.overdue }} overdue</span>{% endif %}</span>
-    {% else %}
-    <span class="muted">No KT topics yet · {{ a.members | length }} member{{ "" if a.members | length == 1 else "s" }}</span>
+<div class="home-panel">
+  <nav class="track-grid" aria-label="KT">
+    <a class="home-card track-button" href="{{ url_for('main.track', track='CLIENT_KT') }}">
+      <span class="home-card-icon tint-peach">{{ icon("client") }}</span>
+      <span class="home-card-text"><strong>{{ tracks.CLIENT_KT }}</strong></span>
+      <span class="home-card-go">Open</span>
+    </a>
+    <a class="home-card track-button" href="{{ url_for('main.track', track='INTERNAL_KT') }}">
+      <span class="home-card-icon tint-mint">{{ icon("existing") }}</span>
+      <span class="home-card-text"><strong>{{ tracks.INTERNAL_KT }}</strong></span>
+      <span class="home-card-go">Open</span>
+    </a>
+  </nav>
+
+  {% if g.user.is_admin or create_url %}
+  <nav class="action-grid" aria-label="Create">
+    {% if g.user.is_admin %}
+    <a class="home-card" href="{{ url_for('admin.new_account') }}">
+      <span class="home-card-icon tint-peach">{{ icon("workspace") }}</span>
+      <span class="home-card-text"><strong>Add Workspace</strong><span>Set up a client account and its team.</span></span>
+      <span class="home-card-go">Add</span>
+    </a>
     {% endif %}
-  </a>
-  {% endfor %}
-</section>
-{% else %}
-<section class="card">
-  <p>You are not a member of any client account yet.</p>
-  {% if g.user.is_admin %}
-  <p><a class="button" href="{{ url_for('admin.new_account') }}">Create a client account</a></p>
-  {% else %}
-  <p class="muted">Ask your KT lead or the KITE admin to add you to your account.</p>
+    {% if create_url %}
+    <a class="home-card" href="{{ create_url }}">
+      <span class="home-card-icon tint-mint">{{ icon("create") }}</span>
+      <span class="home-card-text"><strong>Create Document</strong><span>Write KT notes, runbooks or SOPs.</span></span>
+      <span class="home-card-go">Create</span>
+    </a>
+    <a class="home-card" href="{{ url_for('main.template_gallery') }}">
+      <span class="home-card-icon tint-blue">{{ icon("template") }}</span>
+      <span class="home-card-text"><strong>Template Gallery</strong><span>Start faster from IT KT templates.</span></span>
+      <span class="home-card-go">Open</span>
+    </a>
+    {% endif %}
+  </nav>
   {% endif %}
-</section>
-{% endif %}
+
+  {% if accounts %}
+  <div class="home-section-head">
+    <h2>Insights</h2>
+    <a href="{{ url_for('reports.overview') }}">All reports</a>
+  </div>
+  <section class="insight-grid" aria-label="Insights">
+    <div class="insight">
+      <span class="insight-label">KT signed off</span>
+      <span class="insight-value">{{ insights.progress }}%</span>
+      <span class="insight-note">{{ insights.signed_off }} of {{ insights.total }} topics</span>
+    </div>
+    <div class="insight">
+      <span class="insight-label">Overdue KT topics</span>
+      <span class="insight-value {{ 'overdue' if insights.overdue }}">{{ insights.overdue }}</span>
+      <span class="insight-note">Past their target sign-off</span>
+    </div>
+    <div class="insight">
+      <span class="insight-label">Open doubts</span>
+      <span class="insight-value">{{ insights.open_doubts }}</span>
+      <span class="insight-note">{{ insights.blocking }} blocking</span>
+    </div>
+    <div class="insight">
+      <span class="insight-label">Documents</span>
+      <span class="insight-value">{{ insights.documents }}</span>
+      <span class="insight-note">In {{ accounts | length }} workspace{{ "" if accounts | length == 1 else "s" }}</span>
+    </div>
+  </section>
+
+  <div class="home-columns">
+    <section class="card activity-card">
+      <h2>Recent activity</h2>
+      {% if activity %}
+      <ul class="activity-list">
+        {% for item in activity %}
+        <li>
+          <span class="side-avatar" aria-hidden="true">{{ item.who[:1] | upper }}</span>
+          <span class="activity-text">
+            <strong>{{ item.who }}</strong> {{ item.action }} <a href="{{ item.url }}">{{ item.title }}</a>
+            <span class="activity-meta"><span class="account-chip">{{ item.account }}</span> <span title="{{ item.when | ist }}">{{ item.when | ago }}</span></span>
+          </span>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="muted">Nothing yet. Work done in your workspaces will show here.</p>
+      {% endif %}
+    </section>
+
+    <section class="card">
+      <h2>Activity</h2>
+      <p class="viz-sub">{{ daily | sum(attribute="count") }} actions in the last {{ daily | length }} days</p>
+      <div class="columns columns-days">
+        {% for d in daily %}
+        <div class="col" tabindex="0" data-tip-value="{{ d.count }} action{{ '' if d.count == 1 else 's' }}" data-tip-label="{{ d.date }}">
+          <span class="col-plot"><span class="col-bar col-grow" style="height: {{ [d.height, 2] | max }}%; background: var(--viz-series); --i: {{ loop.index0 }}"></span></span>
+          <span class="col-label">{{ d.day }}</span>
+        </div>
+        {% endfor %}
+      </div>
+      <details class="viz-table">
+        <summary>Show as a table</summary>
+        <table>
+          <thead><tr><th>Day</th><th class="num">Actions</th></tr></thead>
+          <tbody>{% for d in daily %}<tr><td>{{ d.date }}</td><td class="num">{{ d.count }}</td></tr>{% endfor %}</tbody>
+        </table>
+      </details>
+    </section>
+  </div>
+  {% endif %}
+
+  {% if my_topics %}
+  <section class="card">
+    <h2>My KT topics</h2>
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th>Topic</th><th>Account</th><th>My part</th><th>Status</th><th>Target sign-off</th></tr></thead>
+      <tbody>
+        {% for t in my_topics %}
+        <tr>
+          <td><a href="{{ url_for('kt.topic', code=t.account.code, topic_id=t.id) }}">{{ t.title }}</a></td>
+          <td>{{ t.account.code }}</td>
+          <td>{{ "SME" if t.sme_id == g.user.id else "Receiver" }}</td>
+          <td><span class="kt-status kt-{{ t.status }}">{{ t.status_label }}</span></td>
+          <td>{{ t.due_date | date or "—" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </section>
+  {% endif %}
+
+  <h2 class="section-title" id="workspaces">Workspaces</h2>
+  {% if accounts %}
+  <section class="account-grid">
+    {% for a, stats in accounts %}
+    <a class="account-card account-tint-{{ loop.index0 % 4 }}" href="{{ url_for('main.account_detail', code=a.code) }}" style="--i: {{ loop.index0 }}">
+      <span class="account-code">{{ a.code }}</span>
+      <span class="account-name">{{ a.name }}</span>
+      {% if a.description %}<span class="muted account-desc">{{ a.description | truncate(140) }}</span>{% endif %}
+      {% if stats.total %}
+      <span class="progress progress-animated" title="{{ stats.progress }}% of KT topics signed off"><span style="width: {{ stats.progress }}%"></span></span>
+      <span class="muted">KT {{ stats.signed_off }}/{{ stats.total }} signed off{% if stats.overdue %} · <span class="overdue">{{ stats.overdue }} overdue</span>{% endif %}</span>
+      {% else %}
+      <span class="muted">No KT topics yet · {{ a.members | length }} member{{ "" if a.members | length == 1 else "s" }}</span>
+      {% endif %}
+    </a>
+    {% endfor %}
+  </section>
+  {% else %}
+  <section class="card">
+    <p>You are not a member of any client account yet.</p>
+    {% if not g.user.is_admin %}<p class="muted">Ask your KT lead or the KITE admin to add you to your account.</p>{% endif %}
+  </section>
+  {% endif %}
+</div>
+<div class="viz-tip" role="status" aria-live="polite" hidden><strong></strong><span></span></div>
 {% endblock %}

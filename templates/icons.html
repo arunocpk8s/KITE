@@ -1,0 +1,15 @@
+{% macro icon(name) -%}
+<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+  {%- if name == "home" %}<path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v10h4.5v-6h4v6h4.5V10"/>
+  {%- elif name == "search" %}<circle cx="11" cy="11" r="7"/><path d="m20.5 20.5-4.5-4.5"/>
+  {%- elif name == "client" %}<path d="M4 21V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v16"/><path d="M15 10h4a1 1 0 0 1 1 1v10"/><path d="M2 21h20"/><path d="M8 8h3M8 12h3M8 16h3"/>
+  {%- elif name == "existing" %}<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M12 11v5M9.5 13.5h5"/>
+  {%- elif name == "workspace" %}<circle cx="12" cy="6.5" r="3"/><circle cx="6" cy="17" r="3"/><circle cx="18" cy="17" r="3"/><path d="m10.4 9.2-2.9 5.2M13.6 9.2l2.9 5.2M9 17h6"/>
+  {%- elif name == "insights" %}<path d="M5 20v-6M12 20V5M19 20v-10"/><path d="M3 20h18"/>
+  {%- elif name == "admin" %}<path d="M4 7h9M19 7h1M4 17h1M11 17h9"/><circle cx="16" cy="7" r="2.5"/><circle cx="8" cy="17" r="2.5"/>
+  {%- elif name == "logout" %}<path d="M15 4h4a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-4"/><path d="m10 16 4-4-4-4M14 12H4"/>
+  {%- elif name == "create" %}<path d="M20 12v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h7"/><path d="m10 14 .6-3L19 2.800l2.200 2.200L13 13.400z"/>
+  {%- elif name == "template" %}<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 9h8M8 13h8M8 17h5"/>
+  {%- endif %}
+</svg>
+{%- endmacro %}

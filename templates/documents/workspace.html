@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Documents · {{ account.code }} · {{ app_name }}{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('main.account_detail', code=account.code) }}">&larr; {{ account.name }}</a></p>
+<div class="docs-layout">
+  <aside class="docs-side">
+    <p class="docs-side-title">{{ account.name }}</p>
+    <a class="docs-side-link {{ 'active' if not folder }}" href="{{ url_for('documents.workspace', code=account.code) }}">All documents</a>
+    {% for f in folders %}
+    <div class="docs-folder">
+      <a class="docs-side-link {{ 'active' if folder and folder.id == f.id }}" href="{{ url_for('documents.workspace', code=account.code, folder=f.id) }}">{{ f.name }}</a>
+      {% if can_manage %}
+      <form method="post" action="{{ url_for('documents.delete_folder', code=account.code, folder_id=f.id) }}" data-confirm="Remove the folder '{{ f.name }}'? Its documents are kept.">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="link-button" aria-label="Remove folder {{ f.name }}">&times;</button>
+      </form>
+      {% endif %}
+    </div>
+    {% endfor %}
+    {% if can_write %}
+    <form class="docs-new-folder" method="post" action="{{ url_for('documents.add_folder', code=account.code) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input name="name" maxlength="120" placeholder="New folder" aria-label="New folder name" required>
+    </form>
+    {% endif %}
+  </aside>
+
+  <div class="docs-main">
+    <div class="docs-head">
+      <h1>{{ folder.name if folder else "Documents" }}</h1>
+      <form class="docs-search" method="get" action="{{ url_for('documents.workspace', code=account.code) }}" role="search">
+        {% if folder %}<input type="hidden" name="folder" value="{{ folder.id }}">{% endif %}
+        <input type="search" name="q" value="{{ q }}" placeholder="Search documents" aria-label="Search documents">
+      </form>
+    </div>
+
+    {% if can_write %}
+    <div class="doc-templates">
+      {% for key, (name, _) in templates.items() %}
+      <a class="doc-template" href="{{ url_for('documents.new', code=account.code, template=key, folder=folder.id if folder else None) }}">{{ name }}</a>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if documents %}
+    <div class="doc-grid">
+      {% for d in documents %}
+      <a class="doc-card" href="{{ url_for('documents.view', code=account.code, doc_id=d.id) }}">
+        <strong>{{ d.title }}</strong>
+        <span class="muted">{{ d.updated_by.full_name }} · {{ d.updated_at | ist }}</span>
+        {% if d.folder and not folder %}<span class="account-chip">{{ d.folder.name }}</span>{% endif %}
+      </a>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="muted">{{ "Nothing matches your search." if q else "No documents here yet." }}</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

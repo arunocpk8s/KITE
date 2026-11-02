@@ -2,7 +2,7 @@
 sign-off, reopen, permissions and next steps."""
 import pytest
 
-from conftest import account_id, login
+from conftest import account_id, login, steps_for
 from models import KTProject, TransitionPhase, db, ensure_phases
 from timeutil import utcnow
 
@@ -66,7 +66,7 @@ def test_full_transition_in_order(app, client, sent):
         p = db.session.get(KTProject, pid)
         p.client_signed_at, p.client_signer_name = utcnow(), "Clara"
         db.session.commit()
-    assert "Sign off Knowledge transfer" in client.get("/").data.decode()  # next step for the KT lead
+    assert "Sign off Knowledge transfer" in " ".join(s["text"] for s in steps_for(app, "lead"))
     client.post(f"{base(pid)}/{kt}/sign-off", data={"comment": "Good KT"})
     assert status(app, kt) == "SIGNED_OFF" and "signed off" in sent[-1][1]
     # Revoking the client's KT sign-off now needs the KT phase reopened first.

@@ -10,27 +10,29 @@ from flask_wtf.csrf import CSRFProtect
 from sqlalchemy import text
 from werkzeug.middleware.proxy_fix import ProxyFix
 
+import activity
 import notify
 from admin import bp as admin_bp
 import sops
 from doubts import bp as doubts_bp
 from kt import bp as kt_bp
 from kt import my_kt, plan_stats, visible_account_or_404
+from knowledge import search_groups
 from projects import account_projects, track_projects
 from projects import bp as projects_bp
-from nextsteps import next_steps, upcoming_internal_sessions
 from reports import bp as reports_bp
 from transactions import bp as transactions_bp
 from transitions import bp as transitions_bp
 from knowledge import bp as knowledge_bp
 from onboarding import bp as onboarding_bp
+import documents
 import meetings
 import servicenow
 import tasks
 from auth import bp as auth_bp
 from auth import login_required
 from config import DEPARTMENTS, Config
-from models import ROLE_LABELS, ROLES, WORKFLOWS, Account, AccountMember, Change, Question, Transaction, User, db, upgrade_schema
+from models import ROLE_LABELS, ROLES, WORKFLOWS, Account, AccountMember, Change, KTDocument, Question, Transaction, User, db, upgrade_schema
 from timeutil import format_date, format_ist
 
 MIN_PASSWORD_LENGTH = 8
@@ -91,10 +93,12 @@ def create_app(test_config=None):
     app.register_blueprint(knowledge_bp)
     app.register_blueprint(servicenow.bp)
     app.register_blueprint(meetings.bp)
+    app.register_blueprint(documents.bp)
     app.register_blueprint(tasks.bp)
     csrf.exempt(tasks.bp)  # called by a scheduler with a bearer secret, not a browser form
     app.jinja_env.filters["ist"] = format_ist
     app.jinja_env.filters["date"] = format_date
+    app.jinja_env.filters["ago"] = activity.time_ago
 
     with app.app_context():
         db.create_all()
@@ -112,6 +116,7 @@ def create_app(test_config=None):
             "app_name": app.config["APP_NAME"],
             "logo_file": logo,
             "role_labels": ROLE_LABELS,
+            "nav_tracks": WORKFLOWS,
             # Hosted copy without a real database: data is lost on restart, so say so on every page.
             "temporary_database": bool(os.environ.get("VERCEL"))
             and app.config["SQLALCHEMY_DATABASE_URI"].startswith("sqlite"),
@@ -234,10 +239,67 @@ def healthz():
 @login_required
 def dashboard():
     accounts = g.user.visible_accounts().all()
-    topics, upcoming = my_kt(g.user)
-    return render_template("dashboard.html", accounts=[(a, plan_stats(a)) for a in accounts],
-                           my_topics=topics, upcoming=upcoming, steps=next_steps(g.user),
-                           internal=upcoming_internal_sessions(g.user), tracks=WORKFLOWS)
+    stats = [plan_stats(a) for a in accounts]
+    topics, _ = my_kt(g.user)
+    return render_template("dashboard.html", accounts=list(zip(accounts, stats)), my_topics=topics, tracks=WORKFLOWS,
+                           insights=home_insights(accounts, stats), activity=activity.recent_activity(accounts),
+                           daily=activity.activity_by_day(accounts), create_url=_create_document_url(accounts))
+
+
+def home_insights(accounts, stats):
+    ids = [a.id for a in accounts]
+    total, signed_off = sum(s["total"] for s in stats), sum(s["signed_off"] for s in stats)
+    open_doubts = Question.query.filter(Question.account_id.in_(ids), Question.status != "RESOLVED")
+    return {
+        "total": total,
+        "signed_off": signed_off,
+        "progress": round(100 * signed_off / total) if total else 0,
+        "overdue": sum(s["overdue"] for s in stats),
+        "open_doubts": open_doubts.count(),
+        "blocking": open_doubts.filter(Question.blocking.is_(True)).count(),
+        "documents": KTDocument.query.filter(KTDocument.account_id.in_(ids)).count(),
+    }
+
+
+def _create_document_url(accounts):
+    """Straight to a new document with one workspace to write in; with several, choose one in the gallery first."""
+    writable = [a for a in accounts if g.user.can_contribute(a)]
+    if len(writable) == 1:
+        return url_for("documents.new", code=writable[0].code)
+    return url_for("main.template_gallery") if writable else None
+
+
+@bp.route("/search")
+@login_required
+def search_all():
+    """Search every workspace the user can see."""
+    q = " ".join(request.args.get("q", "").split())[:100]
+    workspaces, results = [], []
+    if len(q) >= 2:
+        for account in g.user.visible_accounts():
+            if q.lower() in account.name.lower() or q.lower() in account.code.lower():
+                workspaces.append(account)
+            groups = search_groups(account, q)
+            if any(items for _, items in groups):
+                results.append((account, groups))
+    found = len(workspaces) + sum(len(items) for _, groups in results for _, items in groups)
+    return render_template("search_all.html", q=q, workspaces=workspaces, results=results, found=found)
+
+
+@bp.route("/templates")
+@login_required
+def template_gallery():
+    return render_template("template_gallery.html", templates=documents.TEMPLATES, hints=documents.TEMPLATE_HINTS,
+                           accounts=[a for a in g.user.visible_accounts() if g.user.can_contribute(a)])
+
+
+@bp.route("/templates/start")
+@login_required
+def start_document():
+    """On to the new-document page of the chosen workspace, which checks the user's access."""
+    if not request.args.get("account"):
+        abort(404)
+    return redirect(url_for("documents.new", code=request.args["account"], template=request.args.get("template")))
 
 
 @bp.route("/tracks/<track>")

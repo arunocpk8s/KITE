@@ -331,7 +331,7 @@ def add_kt_event(topic, actor, event_type, old_value=None, new_value=None, comme
 # Checklist items every new project starts with; the KT lead can change them.
 # A project follows one of two tracks, chosen when it is added.
 WORKFLOWS = {
-    "CLIENT_KT": "New Client Transaction KT",
+    "CLIENT_KT": "New Client Transition KT",
     "INTERNAL_KT": "Existing Project KT",
 }
 DEFAULT_WORKFLOW = "CLIENT_KT"
@@ -341,6 +341,8 @@ DEFAULT_CHECKLIST = (
     "Access to the client's systems and tools granted to the team",
     "KT sessions recorded, with recordings and transcripts in the SharePoint KT folder",
     "KT documents saved in the SharePoint KT folder",
+    "Architecture, environments and deployment steps walked through",
+    "Monitoring, alerts and incident process handed over",
     "Runbooks handed over",
     "SOPs handed over",
     "Contacts and escalation matrix shared",
@@ -352,11 +354,23 @@ INTERNAL_CHECKLIST = (
     "Sign-in (SSO) and access to the project's tools granted to the new team members",
     "Internal KT sessions recorded, with recordings and transcripts in the SharePoint KT folder",
     "Existing KT documents reviewed and gaps closed",
+    "Architecture, environments and deployment steps walked through",
+    "Monitoring, alerts and incident process walked through",
     "Runbooks reviewed and up to date",
     "SOPs reviewed and up to date",
     "Buddy and learning path assigned to each new team member",
     "Contacts and escalation matrix updated",
     "Open issues, backlog and known problems handed over",
+)
+# The KT modules an IT project usually needs; offered when a project is added.
+IT_KT_MODULES = (
+    "Application and business process",
+    "Architecture and environments",
+    "Infrastructure and integrations",
+    "Deployment and release",
+    "Monitoring and incident management",
+    "Security and access",
+    "Support process and SLAs",
 )
 DOC_TYPES = ("KT deck", "Recording", "Runbook", "SOP", "Process document", "Architecture", "Other")
 
@@ -855,6 +869,76 @@ class TranscriptItem(db.Model):
     @property
     def kind_label(self):
         return TRANSCRIPT_ITEM_KINDS[self.kind]
+
+
+# --- KT documents --------------------------------------------------------------------------------
+class DocFolder(db.Model):
+    __tablename__ = "doc_folders"
+    __table_args__ = (db.UniqueConstraint("account_id", "name", name="uq_doc_folder"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    account_id = db.Column(db.Integer, db.ForeignKey("accounts.id"), nullable=False, index=True)
+    name = db.Column(db.String(120), nullable=False)
+    created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+
+
+class KTDocument(db.Model):
+    """A rich document in an account's workspace. The body is HTML cleaned by documents.sanitize."""
+
+    __tablename__ = "kt_documents"
+
+    id = db.Column(db.Integer, primary_key=True)
+    account_id = db.Column(db.Integer, db.ForeignKey("accounts.id"), nullable=False, index=True)
+    folder_id = db.Column(db.Integer, db.ForeignKey("doc_folders.id"), index=True)
+    title = db.Column(db.String(200), nullable=False)
+    body = db.Column(db.Text, nullable=False, default="")
+    created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    updated_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+
+    account = db.relationship("Account")
+    folder = db.relationship("DocFolder")
+    created_by = db.relationship("User", foreign_keys=[created_by_id])
+    updated_by = db.relationship("User", foreign_keys=[updated_by_id])
+    versions = db.relationship("DocumentVersion", back_populates="document", cascade="all, delete-orphan",
+                               order_by="DocumentVersion.number")
+    comments = db.relationship("DocumentComment", back_populates="document", cascade="all, delete-orphan",
+                               order_by="DocumentComment.id")
+
+
+class DocumentVersion(db.Model):
+    __tablename__ = "document_versions"
+    __table_args__ = (db.UniqueConstraint("document_id", "number", name="uq_document_version"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    document_id = db.Column(db.Integer, db.ForeignKey("kt_documents.id"), nullable=False, index=True)
+    number = db.Column(db.Integer, nullable=False)
+    title = db.Column(db.String(200), nullable=False)
+    body = db.Column(db.Text, nullable=False, default="")
+    saved_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    saved_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+
+    document = db.relationship("KTDocument", back_populates="versions")
+    saved_by = db.relationship("User")
+
+
+class DocumentComment(db.Model):
+    __tablename__ = "document_comments"
+
+    id = db.Column(db.Integer, primary_key=True)
+    document_id = db.Column(db.Integer, db.ForeignKey("kt_documents.id"), nullable=False, index=True)
+    author_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    # The text selected in the document, if the comment is about a part of it.
+    quote = db.Column(db.String(500), nullable=False, default="")
+    body = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    resolved_at = db.Column(db.DateTime)
+    resolved_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+
+    document = db.relationship("KTDocument", back_populates="comments")
+    author = db.relationship("User", foreign_keys=[author_id])
 
 
 # --- Transactions and change log -----------------------------------------------------------------

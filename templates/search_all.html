@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Search · {{ app_name }}{% endblock %}
+{% block content %}
+{% from "icons.html" import icon %}
+<h1>Search</h1>
+<form class="home-search search-page-form" method="get" action="{{ url_for('main.search_all') }}" role="search">
+  {{ icon("search") }}
+  <input name="q" value="{{ q }}" maxlength="100" aria-label="Search" placeholder="Search documents, SOPs, KT topics and workspaces..." autofocus>
+</form>
+{% if q and q | length < 2 %}
+<p class="muted">Type at least 2 characters.</p>
+{% elif q %}
+<p class="muted">{{ found }} result{{ "" if found == 1 else "s" }} for "{{ q }}".</p>
+{% if workspaces %}
+<section class="card">
+  <h2>Workspaces <span class="tab-count">{{ workspaces | length }}</span></h2>
+  <ul class="plain-list">
+    {% for a in workspaces %}<li><a href="{{ url_for('main.account_detail', code=a.code) }}">{{ a.name }}</a> <span class="account-chip">{{ a.code }}</span></li>{% endfor %}
+  </ul>
+</section>
+{% endif %}
+{% for a, groups in results %}
+<section class="card">
+  <h2>{{ a.name }} <span class="account-chip">{{ a.code }}</span></h2>
+  {% for title, items in groups if items %}
+  <h3>{{ title }} <span class="tab-count">{{ items | length }}</span></h3>
+  <ul class="plain-list">
+    {% for label, url, extra in items %}
+    <li><a href="{{ url }}" {% if url.startswith('http') %}target="_blank" rel="noopener noreferrer"{% endif %}>{{ label }}</a>
+      {% if extra %}<span class="muted">· {{ extra }}</span>{% endif %}</li>
+    {% endfor %}
+  </ul>
+  {% endfor %}
+</section>
+{% endfor %}
+{% endif %}
+{% endblock %}

@@ -6,26 +6,48 @@
   <title>{% block title %}{{ app_name }} · Knowledge Transfer{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
-<body>
-  <header class="topbar">
-    <a class="brand" href="{{ url_for('main.dashboard') }}">
-      {% if logo_file %}<img class="brand-logo" src="{{ url_for('static', filename=logo_file) }}" alt="Company logo">{% endif %}
-      <span class="brand-name">{{ app_name }}</span>
-      <span class="brand-sub">Knowledge Transfer</span>
+<body class="{{ 'with-rail' if g.user else 'no-rail' }}">
+  {% if g.user %}
+  {% from "icons.html" import icon %}
+  {% set nav_account = account if (account is defined and account and account.code) else None %}
+  <aside class="rail">
+    <a class="rail-brand" href="{{ url_for('main.dashboard') }}" aria-label="{{ app_name }} home">
+      {% if logo_file %}<img src="{{ url_for('static', filename=logo_file) }}" alt="">{% else %}<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 3 27 14 16 29 5 14z" fill="#fff"/><path d="M16 3v26M5 14h22" stroke="#0f2239" stroke-width="1.6"/></svg>{% endif %}
     </a>
-    {% if g.user %}
-    <nav>
-      <a href="{{ url_for('main.dashboard') }}">My accounts</a>
-      <a href="{{ url_for('reports.overview') }}">Reports</a>
+    <nav class="rail-nav" aria-label="Main">
+      {% for label, url, name, on in (
+        ("Home", url_for('main.dashboard'), "home", request.endpoint == 'main.dashboard'),
+        ("Search", url_for('main.search_all'), "search", request.endpoint == 'main.search_all'),
+        (nav_tracks.CLIENT_KT, url_for('main.track', track='CLIENT_KT'), "client", request.endpoint == 'main.track' and track == 'CLIENT_KT'),
+        (nav_tracks.INTERNAL_KT, url_for('main.track', track='INTERNAL_KT'), "existing", request.endpoint == 'main.track' and track == 'INTERNAL_KT'),
+        ("Workspaces", url_for('main.dashboard') ~ '#workspaces', "workspace", nav_account is not none),
+        ("Insights", url_for('reports.overview'), "insights", request.blueprint == 'reports'),
+      ) %}
+      <a class="rail-link {{ 'active' if on }}" href="{{ url }}" aria-label="{{ label }}" data-tip="{{ label }}">{{ icon(name) }}</a>
+      {% endfor %}
       {% if g.user.is_admin %}
-      <a href="{{ url_for('admin.overview') }}">Admin console</a>
+      <a class="rail-link {{ 'active' if request.blueprint == 'admin' }}" href="{{ url_for('admin.overview') }}" aria-label="Admin console" data-tip="Admin console">{{ icon("admin") }}</a>
       {% endif %}
-      <span class="who">{{ g.user.full_name }} &middot; {{ g.user.role_label }}</span>
-      <a href="{{ url_for('auth.logout') }}">Log out</a>
     </nav>
-    {% endif %}
-  </header>
-  <main>
+    <div class="rail-foot">
+      <span class="side-avatar" title="{{ g.user.full_name }} · {{ g.user.role_label }}">{{ g.user.full_name[:1] | upper }}</span>
+      <a class="rail-link" href="{{ url_for('auth.logout') }}" aria-label="Log out" data-tip="Log out">{{ icon("logout") }}</a>
+    </div>
+  </aside>
+  {% if nav_account %}
+  <aside class="workspace-panel">
+    <a class="workspace-name {{ 'active' if request.endpoint == 'main.account_detail' }}" href="{{ url_for('main.account_detail', code=nav_account.code) }}" title="{{ nav_account.name }}">
+      <span class="home-org-mark" aria-hidden="true">{{ nav_account.name[:1] | upper }}</span><span>{{ nav_account.name }}</span>
+    </a>
+    <nav aria-label="{{ nav_account.name }}">
+      {% for label, endpoint in (("KT plan", "kt.plan"), ("Documents", "documents.workspace"), ("SOPs", "sops.sop_list"), ("Scope of work", "sops.scope"), ("Transactions", "transactions.catalogue"), ("Change log", "transactions.change_log"), ("Doubts", "doubts.doubt_list"), ("Onboarding", "onboarding.index"), ("Glossary", "knowledge.glossary"), ("Search", "knowledge.search")) %}
+      <a class="side-link {{ 'active' if request.endpoint == endpoint }}" href="{{ url_for(endpoint, code=nav_account.code) }}">{{ label }}</a>
+      {% endfor %}
+    </nav>
+  </aside>
+  {% endif %}
+  {% endif %}
+  <main class="{% block main_class %}{% endblock %}">
     {% if temporary_database %}
     <p class="flash flash-error">This deployment has no permanent database connected, so it uses a temporary one that is wiped often (users and data disappear).
       Connect a Postgres database in Vercel (Storage) and redeploy.</p>
@@ -38,5 +60,6 @@
     {% block content %}{% endblock %}
   </main>
   <script src="{{ url_for('static', filename='app.js') }}"></script>
+  {% block scripts %}{% endblock %}
 </body>
 </html>

@@ -2,7 +2,7 @@
 glossary and search."""
 import pytest
 
-from conftest import login, user_id
+from conftest import login, user_id, steps_for
 from models import GlossaryEntry, LearningPath, Onboarding, PathItem, Question, db
 from test_kt import make_module, make_topic
 
@@ -82,7 +82,7 @@ def test_newcomer_journey_to_ready(app, client, sent):
 
     topic_item, link_item, optional_item = items(app, pid)
     login(client, "mem1")
-    assert "Continue your learning path" in client.get("/").data.decode()
+    assert "Continue your learning path" in " ".join(s["text"] for s in steps_for(app, "mem1"))
     client.post(f"{A}/onboarding/{oid}/items/{topic_item}", data={"status": "NEEDS_HELP", "note": "Which GL?"})
     with app.app_context():
         q = Question.query.one()
@@ -96,7 +96,7 @@ def test_newcomer_journey_to_ready(app, client, sent):
 
     login(client, "sme")  # the buddy
     assert client.post(f"{A}/onboarding/{oid}/ready").status_code == 400  # reverse KT first
-    assert "reverse KT" in client.get("/").data.decode()
+    assert "reverse KT" in " ".join(s["text"] for s in steps_for(app, "sme"))
     client.post(f"{A}/onboarding/{oid}/reverse-kt", data={"note": "Explained clearly"})
     client.post(f"{A}/onboarding/{oid}/ready")
     with app.app_context():

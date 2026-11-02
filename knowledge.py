@@ -3,11 +3,12 @@ glossary, doubts and KT documents. SMEs and KT leads edit the glossary; every me
 from flask import Blueprint, abort, flash, g, redirect, render_template, request, url_for
 from sqlalchemy import or_
 
+import documents
 import servicenow
 from auth import login_required
 from kt import visible_account_or_404
 from models import (
-    GLOSSARY_KINDS, GlossaryEntry, KTProject, KTTopic, ProjectDocument, Question, Sop, SopVersion, Transaction, db,
+    GLOSSARY_KINDS, GlossaryEntry, KTDocument, KTProject, KTTopic, ProjectDocument, Question, Sop, SopVersion, Transaction, db,
 )
 from sops import can_author
 from timeutil import utcnow
@@ -95,40 +96,49 @@ def edit_entry(code, entry_id):
     return redirect(url_for("knowledge.glossary", code=account.code) + f"#entry-{entry.id}")
 
 
+def search_groups(account, q):
+    """(group name, [(label, url, extra)]) of everything in the account that matches q."""
+    code = account.code
+    like = "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+    a = account.id
+
+    def match(column):
+        return column.ilike(like, escape="\\")
+
+    topics = KTTopic.query.filter(KTTopic.account_id == a, or_(match(KTTopic.title), match(KTTopic.description))).limit(MAX_RESULTS)
+    sop_ids = {v.sop_id for v in SopVersion.query.join(Sop).filter(
+        Sop.account_id == a, or_(match(SopVersion.purpose), match(SopVersion.steps))).all()}
+    sops = Sop.query.filter(Sop.account_id == a, or_(match(Sop.title), Sop.id.in_(sop_ids))).limit(MAX_RESULTS)
+    txns = Transaction.query.filter(Transaction.account_id == a, or_(
+        match(Transaction.code), match(Transaction.name), match(Transaction.purpose),
+        match(Transaction.steps), match(Transaction.system))).limit(MAX_RESULTS)
+    terms = GlossaryEntry.query.filter(GlossaryEntry.account_id == a, or_(
+        match(GlossaryEntry.term), match(GlossaryEntry.meaning))).limit(MAX_RESULTS)
+    doubts = Question.query.filter(Question.account_id == a, or_(match(Question.title), match(Question.detail))).limit(MAX_RESULTS)
+    links = ProjectDocument.query.join(KTProject).filter(KTProject.account_id == a, match(ProjectDocument.title)).limit(MAX_RESULTS)
+    # A document's body is HTML: match the words a reader sees, not its tags.
+    written = [d for d in KTDocument.query.filter(KTDocument.account_id == a, or_(match(KTDocument.title), match(KTDocument.body)))
+               if q.lower() in d.title.lower() or q.lower() in " ".join(documents.plain_text(d.body).split()).lower()][:MAX_RESULTS]
+    return [
+        ("KT topics", [(t.title, url_for("kt.topic", code=code, topic_id=t.id), t.status_label) for t in topics]),
+        ("Documents", [(d.title, url_for("documents.view", code=code, doc_id=d.id), None) for d in written]),
+        ("SOPs", [(f"{s.code} {s.title}", url_for("sops.sop", code=code, sop_id=s.id), s.status_label) for s in sops]),
+        ("Transactions", [(f"{t.code} {t.name}", url_for("transactions.transaction", code=code, txn_id=t.id),
+                           t.system) for t in txns]),
+        ("Glossary", [(e.term, url_for("knowledge.glossary", code=code) + f"#entry-{e.id}", e.meaning[:120])
+                      for e in terms]),
+        ("Doubts", [(f"{d.code} {d.title}", url_for("doubts.question", code=code, question_id=d.id),
+                     d.status_label) for d in doubts]),
+        ("KT documents", [(d.title, d.url, d.doc_type) for d in links]),
+    ]
+
+
 @bp.route("/search")
 @login_required
 def search(code):
     account = visible_account_or_404(code)
     q = " ".join(request.args.get("q", "").split())[:100]
-    groups = []
-    if len(q) >= 2:
-        like = f"%{q}%"
-        a = account.id
-        topics = KTTopic.query.filter(KTTopic.account_id == a,
-                                      or_(KTTopic.title.ilike(like), KTTopic.description.ilike(like))).limit(MAX_RESULTS)
-        sop_ids = {v.sop_id for v in SopVersion.query.join(Sop).filter(
-            Sop.account_id == a, or_(SopVersion.purpose.ilike(like), SopVersion.steps.ilike(like))).all()}
-        sops = Sop.query.filter(Sop.account_id == a, or_(Sop.title.ilike(like), Sop.id.in_(sop_ids))).limit(MAX_RESULTS)
-        txns = Transaction.query.filter(Transaction.account_id == a, or_(
-            Transaction.code.ilike(like), Transaction.name.ilike(like), Transaction.purpose.ilike(like),
-            Transaction.steps.ilike(like), Transaction.system.ilike(like))).limit(MAX_RESULTS)
-        terms = GlossaryEntry.query.filter(GlossaryEntry.account_id == a, or_(
-            GlossaryEntry.term.ilike(like), GlossaryEntry.meaning.ilike(like))).limit(MAX_RESULTS)
-        doubts = Question.query.filter(Question.account_id == a, or_(
-            Question.title.ilike(like), Question.detail.ilike(like))).limit(MAX_RESULTS)
-        docs = ProjectDocument.query.join(KTProject).filter(KTProject.account_id == a,
-                                                             ProjectDocument.title.ilike(like)).limit(MAX_RESULTS)
-        groups = [
-            ("KT topics", [(t.title, url_for("kt.topic", code=code, topic_id=t.id), t.status_label) for t in topics]),
-            ("SOPs", [(f"{s.code} {s.title}", url_for("sops.sop", code=code, sop_id=s.id), s.status_label) for s in sops]),
-            ("Transactions", [(f"{t.code} {t.name}", url_for("transactions.transaction", code=code, txn_id=t.id),
-                               t.system) for t in txns]),
-            ("Glossary", [(e.term, url_for("knowledge.glossary", code=code) + f"#entry-{e.id}", e.meaning[:120])
-                          for e in terms]),
-            ("Doubts", [(f"{d.code} {d.title}", url_for("doubts.question", code=code, question_id=d.id),
-                         d.status_label) for d in doubts]),
-            ("KT documents", [(d.title, d.url, d.doc_type) for d in docs]),
-        ]
+    groups = search_groups(account, q) if len(q) >= 2 else []
     return render_template("knowledge/search.html", account=account, q=q, groups=groups,
                            found=sum(len(items) for _, items in groups),
                            kb_conn=servicenow.connection_for(account) if len(q) >= 2 else None)

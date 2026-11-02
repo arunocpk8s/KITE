@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}History · {{ doc.title }} · {{ app_name }}{% endblock %}
+{% block content %}
+<div class="doc-bar"><a href="{{ url_for('documents.view', code=account.code, doc_id=doc.id) }}">&larr; {{ doc.title }}</a></div>
+<div class="doc-read-layout">
+  <article class="doc-paper">
+    <h1 class="doc-title">{{ shown.title }}</h1>
+    <div class="doc-body">{{ body }}</div>
+  </article>
+  <aside class="doc-comments">
+    <h2>Versions</h2>
+    {% for v in doc.versions | reverse %}
+    <p class="{{ 'doc-version-current' if v.number == shown.number }}">
+      <a href="{{ url_for('documents.history', code=account.code, doc_id=doc.id, version=v.number) }}">Version {{ v.number }}</a>
+      <br><span class="muted">{{ v.saved_by.full_name }} · {{ v.saved_at | ist }}</span>
+    </p>
+    {% endfor %}
+    {% if can_write and shown.number != doc.versions[-1].number %}
+    <form method="post" action="{{ url_for('documents.restore', code=account.code, doc_id=doc.id, number=shown.number) }}" data-confirm="Restore version {{ shown.number }}?">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit">Restore this version</button>
+    </form>
+    {% endif %}
+  </aside>
+</div>
+{% endblock %}

@@ -22,10 +22,25 @@ daily reminder emails, documentation and deployment set-up (phase 7).
 KITE was started from a copy of FAXORA but shares nothing with it: separate folder, git
 repository, settings, secrets and databases.
 
+## Layout
+
+Signed-in pages have a dark icon rail: Home, Search, the two KT tracks, Workspaces, Insights (reports) and the Admin
+console. Inside a workspace (client account) a panel lists its sections. The home page has search across the workspaces
+you can see, the two tracks, quick actions, a template gallery, insights and recent activity (`activity.py`). A new project can start with the standard IT KT modules (application,
+architecture, infrastructure, deployment, monitoring, security, support).
+
+## KT documents
+
+Each client account has a **Documents** workspace: folders, search, and documents started from templates (KT plan,
+meeting notes, runbook, SOP, RACI matrix, hand-over checklist, knowledge article). The editor has headings, lists,
+tables, links and link cards. Documents keep every saved version, can be restored and exported to Word, and take
+comments on selected text with @username mentions. Everyone except viewers can write. It is not live co-editing:
+if two people edit at once, the second save is refused rather than overwriting the first.
+
 ## Project tracks and meeting transcripts
 
 Each project follows one of two tracks, both shown on the home page and chosen when the project is added: **New
-Client Transaction KT** (KT from the client) or **Existing Project KT** (KT from the current team, ending with new
+Client Transition KT** (KT from the client) or **Existing Project KT** (KT from the current team, ending with new
 people onboarded to the team). The track sets the checklist and the phases: KT, recordings, documents, runbooks, SOPs, RACI, client sign-off, shadow and reverse shadow.
 
 On a project page, **Add a transcript** takes a Teams or Zoom transcript (.vtt, .docx, .txt) or pasted text. KITE
@@ -90,7 +105,7 @@ a "Retired" change retires its transaction.
 *blocking*, about a topic, transaction or project. It goes to the topic's SME (else the transaction's
 owner, else the KT leads to assign). Answers email the asker; the asker resolves it once unblocked.
 
-**My next steps** (home page) lists everything waiting on each person: KT to confirm or rate, internal KT,
+**My next steps** (`nextsteps.py`, not shown on any page at the moment) works out everything waiting on each person: KT to confirm or rate, internal KT,
 changes to acknowledge, doubts to answer or check, sessions to schedule or record, SOPs to fix or review,
 topics to sign off, projects needing client sign-off (including for the client approver).
 
@@ -229,7 +244,7 @@ projects.py   projects: checklist, client sign-off, internal KT, SharePoint KT d
 sops.py       SOPs (versions, review, approval, review dates, reminders) and scope of work
 transactions.py transaction catalogue and change log with acknowledgements
 doubts.py     doubts (technical questions) with replies, assignment and resolution
-nextsteps.py  "My next steps" for the home page
+nextsteps.py  "My next steps" (not shown on any page at the moment)
 reports.py    reports page, chart data and team readiness CSV
 transitions.py transition phases and exit criteria
 onboarding.py learning paths, newcomers, reverse KT and readiness

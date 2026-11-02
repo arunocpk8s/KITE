@@ -67,6 +67,13 @@ def user_id(username):
     return User.query.filter_by(username=username).one().id
 
 
+def steps_for(app, username):
+    """The next steps worked out for a user."""
+    from nextsteps import next_steps
+    with app.test_request_context():
+        return next_steps(User.query.filter_by(username=username).one())
+
+
 def account_id(code):
     return Account.query.filter_by(code=code).one().id
 

@@ -1,5 +1,5 @@
-"""'My next steps' on the home page: everything waiting on this person, so nobody is stuck wondering
-how to move on. Each step says what to do and links straight to where it is done."""
+"""'My next steps': everything waiting on this person, so nobody is stuck wondering how to move on. Each
+step says what to do and links to where it is done. Not shown on any page at the moment (taken off the home page)."""
 from flask import url_for
 
 from kt import CONFIRMABLE

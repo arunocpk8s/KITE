@@ -3,7 +3,7 @@ from datetime import date, datetime, timedelta
 
 import pytest
 
-from conftest import login, user_id
+from conftest import login, user_id, steps_for
 from models import Change, ChangeAck, KTTopic, Question, Transaction, db
 from test_kt import confirm_all, make_module, make_topic
 
@@ -191,23 +191,20 @@ def test_next_steps_for_receiver_lead_and_sme(app, client):
     make_topic(app, mid, title="Dunning", status="PLANNED", sme="sme")
     login(client, "mem1")
     client.post(f"{A}/doubts/new", data={"title": "Blocked on access", "blocking": "on"})
-    page = client.get("/").data.decode()
-    assert "Confirm you received the KT for &#39;Credit notes&#39;" in page
+    page = " ".join(s["text"] for s in steps_for(app, "mem1"))
+    assert "Confirm you received the KT for 'Credit notes'" in page
     assert "Rate how well you understood" in page
     client.get("/logout")
 
-    login(client, "sme")
-    page = client.get("/").data.decode()
-    assert "Schedule the KT session for &#39;Dunning&#39;" in page
-    client.get("/logout")
+    assert "Schedule the KT session for 'Dunning'" in " ".join(s["text"] for s in steps_for(app, "sme"))
 
     confirm_all(app, tid)
     with app.app_context():
         db.session.get(KTTopic, tid).status = "REVERSE_KT"
         db.session.commit()
-    login(client, "lead")
-    page = client.get("/").data.decode()
-    assert "Sign off &#39;Credit notes&#39;" in page and "Assign Q-001" in page and "Urgent" in page
+    steps = steps_for(app, "lead")
+    page = " ".join(s["text"] for s in steps)
+    assert "Sign off 'Credit notes'" in page and "Assign Q-001" in page and any(s["urgent"] for s in steps)
 
 
 # --- reports -------------------------------------------------------------------------------------

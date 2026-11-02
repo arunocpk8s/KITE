@@ -46,7 +46,7 @@
     </table>
     </div>
     {% else %}
-    <p class="muted">No KT topics yet.{% if can_manage %} Add a module, then its topics, from the KT plan.{% endif %}</p>
+    <p class="muted">No KT topics yet.{% if can_manage %} {% if project.modules %}Add topics to its {{ project.modules | length }} modules from the KT plan.{% else %}Add a module, then its topics, from the KT plan.{% endif %}{% endif %}</p>
     {% endif %}
   </section>
 

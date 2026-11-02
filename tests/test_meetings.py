@@ -68,9 +68,27 @@ def test_internal_workflow_has_its_own_checklist_and_phases(app, client):
         assert KTProject.query.one().workflow == "INTERNAL_KT"
 
 
+def test_new_project_can_start_with_the_it_modules(app, client):
+    login(client, "lead")
+    assert b'name="it_modules"' in client.get(f"{A}/projects/new").data
+    client.post(f"{A}/projects/new", data={"name": "With", "it_modules": "1"})
+    client.post(f"{A}/projects/new", data={"name": "Without"})
+    with app.app_context():
+        assert "Deployment and release" in [m.title for m in KTProject.query.filter_by(name="With").one().modules]
+        assert KTProject.query.filter_by(name="Without").one().modules == []
+
+
+def test_sidebar_shows_only_your_workspaces(app, client):
+    login(client, "mem2")
+    page = client.get("/").data
+    assert b"Beta Bank" in page and b"Acme Corporation" not in page and b"New Client Transition KT" in page
+    assert b"Admin console" not in page and b"Log out" in page
+    assert b"side-link" not in client.get("/logout", follow_redirects=True).data
+
+
 def test_client_workflow_is_the_default_and_covers_the_requested_items(app, client):
     login(client, "lead")
-    assert b"New Client Transaction KT" in client.get(f"{A}/projects/new").data
+    assert b"New Client Transition KT" in client.get(f"{A}/projects/new").data
     client.post(f"{A}/projects/new", data={"name": "New AP"})
     with app.app_context():
         project = KTProject.query.one()
@@ -85,8 +103,10 @@ def test_home_page_has_two_plain_track_buttons(app, client):
     make_project(app, workflow="INTERNAL_KT")
     login(client, "lead")
     page = client.get("/").data.decode()
-    assert page.index("New Client Transaction KT") < page.index("Existing Project KT") < page.index("My next steps")
-    nav = page[page.index('class="track-grid"'):page.index("My next steps")]
+    assert "My next steps" not in page and "Coming up" not in page
+    assert page.index("New Client Transition KT") < page.index("Existing Project KT")
+    start = page.index('class="track-grid"')
+    nav = page[start:page.index("</nav>", start)]
     assert nav.count("track-button") == 2 and "/tracks/CLIENT_KT" in nav and "/tracks/INTERNAL_KT" in nav
     assert "Payables" not in nav and "in progress" not in nav  # names only: no status, no explanation
     assert "Track 1" not in page and "Track 2" not in page

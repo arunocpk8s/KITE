@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Template Gallery · {{ app_name }}{% endblock %}
+{% block content %}
+{% from "icons.html" import icon %}
+<h1>Template Gallery</h1>
+{% if accounts %}
+<form method="get" action="{{ url_for('main.start_document') }}">
+  <div class="gallery-workspace">
+    <label for="account">Workspace</label>
+    <select id="account" name="account">
+      {% for a in accounts %}<option value="{{ a.code }}">{{ a.name }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="gallery-grid">
+    {% for key, (name, _) in templates.items() %}
+    <button class="gallery-card" type="submit" name="template" value="{{ key }}">
+      <span class="home-card-icon {{ ('tint-peach', 'tint-mint', 'tint-blue')[loop.index0 % 3] }}">{{ icon("create" if key == "blank" else "template") }}</span>
+      <strong>{{ name }}</strong>
+      <span>{{ hints[key] }}</span>
+    </button>
+    {% endfor %}
+  </div>
+</form>
+{% else %}
+<section class="card"><p class="muted">You can create documents once you are a contributor in a workspace.</p></section>
+{% endif %}
+{% endblock %}

@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ account.code }} · {{ app_name }}{% endblock %}
 {% block content %}
-<p><a href="{{ url_for('main.dashboard') }}">&larr; My accounts</a></p>
+<p><a href="{{ url_for('main.dashboard') }}">&larr; Home</a></p>
 <h1>{{ account.name }} <span class="muted">({{ account.code }})</span>
   {% if not account.active %}<span class="badge-breached">Deactivated</span>{% endif %}</h1>
 {% if account.description %}<p class="description">{{ account.description }}</p>{% endif %}
@@ -14,13 +14,7 @@
   <div class="tile"><span class="tile-value">{{ members | length }}</span><span class="tile-label">Members</span></div>
 </section>
 <p><a class="button" href="{{ url_for('kt.plan', code=account.code) }}">Open the KT plan</a>
-  <a class="button button-secondary" href="{{ url_for('sops.sop_list', code=account.code) }}">SOPs ({{ sop_stats.total }}{% if sop_stats.review_overdue %}, {{ sop_stats.review_overdue }} review overdue{% endif %})</a>
-  <a class="button button-secondary" href="{{ url_for('sops.scope', code=account.code) }}">Scope of work</a>
-  <a class="button button-secondary" href="{{ url_for('transactions.catalogue', code=account.code) }}">Transactions ({{ phase4.transactions }})</a>
-  <a class="button button-secondary" href="{{ url_for('transactions.change_log', code=account.code) }}">Change log ({{ phase4.changes }})</a>
-  <a class="button button-secondary" href="{{ url_for('doubts.doubt_list', code=account.code) }}">Doubts ({{ phase4.open_doubts }} open)</a>
-  <a class="button button-secondary" href="{{ url_for('onboarding.index', code=account.code) }}">Onboarding</a>
-  <a class="button button-secondary" href="{{ url_for('knowledge.glossary', code=account.code) }}">Glossary</a>
+  <a class="button" href="{{ url_for('documents.workspace', code=account.code) }}">Documents</a>
   <a class="button button-secondary" href="{{ url_for('reports.overview', account=account.code) }}">Reports</a></p>
 <form class="filters" method="get" action="{{ url_for('knowledge.search', code=account.code) }}">
   <label>Search this account<input name="q" maxlength="100" placeholder="Topics, SOPs, transactions, glossary, doubts, documents"></label>

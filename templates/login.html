@@ -4,6 +4,7 @@
 <section class="card narrow">
   {% if logo_file %}<img class="login-logo" src="{{ url_for('static', filename=logo_file) }}" alt="Company logo">{% endif %}
   <h1>Log in to {{ app_name }}</h1>
+  <p class="muted">Knowledge Transfer</p>
   {% if sso_enabled %}
   <a class="button sso-button" href="{{ url_for('auth.sso_start', next=next) }}">Sign in with Microsoft</a>
   <p class="hint">Use your company account. You get a KITE account automatically on first sign-in.</p>

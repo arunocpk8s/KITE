@@ -377,7 +377,8 @@ def test_my_kt_on_home_page(app, client):
     login(client, "mem1")
     page = client.get("/").data
     assert b"My KT" in page and b"I receive this" in page
-    assert b"Not mine" not in page and b"Finished" not in page
+    mine = page[page.index(b"My KT topics"):page.index(b"</table>", page.index(b"My KT topics"))]
+    assert b"I receive this" in mine and b"Not mine" not in mine and b"Finished" not in mine
     client.get("/logout")
     login(client, "sme")
     assert b"I receive this" in client.get("/").data and b"SME" in client.get("/").data

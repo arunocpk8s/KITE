@@ -21,7 +21,7 @@ import notify
 from auth import login_required
 from kt import TIME_RE, URL_RE, members_of, visible_account_or_404
 from models import (
-    DEFAULT_CHECKLIST, DEFAULT_WORKFLOW, DOC_TYPES, INTERNAL_CHECKLIST, WORKFLOWS, InternalSession, KTProject, KTTopic, ProjectChecklistItem, ProjectDocument,
+    DEFAULT_CHECKLIST, DEFAULT_WORKFLOW, DOC_TYPES, INTERNAL_CHECKLIST, IT_KT_MODULES, WORKFLOWS, InternalSession, KTModule, KTProject, KTTopic, ProjectChecklistItem, ProjectDocument,
     ProjectTeamMember, User, add_project_event, db, ensure_phases,
 )
 from timeutil import format_ist, ist_local_to_utc, parse_date, utcnow
@@ -219,10 +219,13 @@ def new_project(code):
     for i, title in enumerate(INTERNAL_CHECKLIST if project.is_internal else DEFAULT_CHECKLIST, start=1):
         project.checklist.append(ProjectChecklistItem(title=title, position=i))
     ensure_phases(project)
+    if request.form.get("it_modules") == "1":
+        for i, title in enumerate(IT_KT_MODULES, start=1):
+            project.modules.append(KTModule(account_id=account.id, title=title, position=i))
     db.session.add(project)
     add_project_event(project, g.user, "CREATED")
     db.session.commit()
-    flash(f"Project '{project.name}' added with the checklist and phases of its workflow. Add its KT modules next.",
+    flash(f"Project '{project.name}' added with the checklist and phases of its track.",
           "success")
     return _back(project)
 

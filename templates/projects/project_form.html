@@ -19,6 +19,7 @@
       {% endfor %}
       <p class="hint">Sets the checklist and phases: KT, recordings, documents, runbooks, SOPs, RACI, client sign-off, shadow and reverse shadow. Existing Project KT ends with the new people onboarded to the team. The track cannot be changed later.</p>
       {% if errors.workflow %}<p class="error">{{ errors.workflow }}</p>{% endif %}
+      <label class="inline"><input type="checkbox" name="it_modules" value="1" checked> Start the KT plan with the standard IT modules (application, architecture, infrastructure, deployment, monitoring, security, support)</label>
     </fieldset>
     {% endif %}
     <label for="name">Project name</label>

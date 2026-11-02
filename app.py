@@ -22,7 +22,7 @@ from doubts import bp as doubts_bp
 from kt import bp as kt_bp
 from kt import my_kt, plan_stats, visible_account_or_404
 from knowledge import search_groups
-from projects import account_projects, track_projects
+from projects import account_projects, latest_track_projects, track_projects
 from projects import bp as projects_bp
 from reports import bp as reports_bp
 from transactions import bp as transactions_bp
@@ -265,7 +265,8 @@ def dashboard():
     topics, _ = my_kt(g.user)
     return render_template("dashboard.html", accounts=list(zip(accounts, stats)), my_topics=topics, tracks=WORKFLOWS,
                            insights=home_insights(accounts, stats), activity=activity.recent_activity(accounts),
-                           daily=activity.activity_by_day(accounts), create_url=_create_document_url(accounts))
+                           daily=activity.activity_by_day(accounts), create_url=_create_document_url(accounts),
+                           track_lists=latest_track_projects(accounts))
 
 
 def home_insights(accounts, stats):

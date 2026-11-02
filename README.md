@@ -36,8 +36,16 @@ status. The plan page groups topics by technology and process, and shows or chan
 Visio, JPG and PNG files up to 4 MB can be added to a plan or topic (`attachments.py`; stored in the database), and KT
 topics can be read from a Word file, checked before they are added. Client sign-off and internal KT are on the
 transition plan page. The SOP and scope of work pages can propose items from a meeting's transcript, read by Claude
-where the account allows it. The Backlog (`backlog.py`) sits beside the change log. Everyone in an account, viewers
+where the account allows it; without AI, KITE's own rules read plainly stated steps. Any SOP version downloads as
+PowerPoint (`sop_slides.py`), marked on every slide if it is not the approved one. The Backlog (`backlog.py`) sits beside the change log. Everyone in an account, viewers
 included, can raise a doubt.
+
+## Azure SSO from the Admin console
+
+Microsoft sign-in can be set in the server's environment (`SSO_ENABLED`, `AZURE_*`) or by an admin in Admin console,
+Azure SSO: tenant ID, client ID, client secret (stored encrypted) and a switch. Saved values come first and take effect
+at once. Passwords stay on alongside it until `LOCAL_LOGIN_ENABLED=false` is set on the server, so a wrong setting
+cannot lock anyone out.
 
 ## KT documents
 

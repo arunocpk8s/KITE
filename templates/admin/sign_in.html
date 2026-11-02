@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Microsoft sign-in · Admin console · {{ app_name }}{% endblock %}
+{% block content %}
+{% with active = 'sign_in' %}{% include "admin/_tabs.html" %}{% endwith %}
+
+<section class="card narrow-form">
+  <div class="module-head">
+    <h2>Azure SSO (Microsoft sign-in)</h2>
+    <span class="push-right stage {{ 'stage-COMPLETE' if live else '' }}">{{ "On" if live else "Off" }}</span>
+  </div>
+  <p class="muted">People sign in with their company Microsoft account. Their role and client accounts still come from KITE.</p>
+
+  <h3>What IT needs to set up</h3>
+  <ol class="plain-steps">
+    <li>Register a single-tenant web app in Microsoft Entra ID, with the Microsoft Graph delegated permission User.Read.</li>
+    <li>Add this redirect URI to it: <code class="copy-value">{{ redirect_uri }}</code></li>
+    <li>Give you its tenant ID, client ID and a client secret, to enter below.</li>
+  </ol>
+  {% if not redirect_ok %}<p class="flash flash-error">Microsoft needs an https address. Set APP_BASE_URL to the https address people use to open KITE.</p>{% endif %}
+
+  <form method="post" action="{{ url_for('admin.sign_in_save') }}" novalidate>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label for="AZURE_TENANT_ID">Tenant ID</label>
+    <input id="AZURE_TENANT_ID" name="AZURE_TENANT_ID" value="{{ form.tenant }}" maxlength="36" placeholder="00000000-0000-0000-0000-000000000000" autocomplete="off">
+    {% if errors.tenant %}<p class="error">{{ errors.tenant }}</p>{% endif %}
+    <label for="AZURE_CLIENT_ID">Client ID (application ID)</label>
+    <input id="AZURE_CLIENT_ID" name="AZURE_CLIENT_ID" value="{{ form.client_id }}" maxlength="36" placeholder="00000000-0000-0000-0000-000000000000" autocomplete="off">
+    {% if errors.client_id %}<p class="error">{{ errors.client_id }}</p>{% endif %}
+    <label for="AZURE_CLIENT_SECRET">Client secret</label>
+    <input id="AZURE_CLIENT_SECRET" name="AZURE_CLIENT_SECRET" type="password" maxlength="500" autocomplete="new-password"
+           placeholder="{{ 'Saved. Leave empty to keep it.' if secret_status in ('saved', 'env') else '' }}">
+    {% if secret_status == 'unreadable' %}<p class="error">The saved secret can no longer be read, because SECRET_KEY changed. Enter it again.</p>{% endif %}
+    {% if errors.secret %}<p class="error">{{ errors.secret }}</p>{% endif %}
+    <p class="hint">Stored encrypted and never shown again.</p>
+    <label class="inline sso-switch"><input type="checkbox" name="SSO_ENABLED" value="1" {% if form.enabled %}checked{% endif %}> Show "Sign in with Microsoft" on the login page</label>
+    {% if errors.enabled %}<p class="error">{{ errors.enabled }}</p>{% endif %}
+    <button type="submit">Save</button>
+  </form>
+
+  <form class="inline" method="post" action="{{ url_for('admin.sign_in_test') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="button-secondary">Check the saved settings with Microsoft</button>
+  </form>
+  {% if saved %}
+  <form class="inline" method="post" action="{{ url_for('admin.sign_in_reset') }}" data-confirm="Remove what was saved here and use the server's settings again?">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="button-secondary">Use the server's settings</button>
+  </form>
+  {% endif %}
+</section>
+
+<section class="card narrow-form">
+  <h2>Password sign-in</h2>
+  <p>{% if local_login %}Passwords stay <strong>on</strong> alongside Microsoft sign-in, so you cannot be locked out if something is wrong.
+    {% else %}Passwords are <strong>off</strong>, except for the emergency admin accounts.{% endif %}</p>
+  <p class="hint">Switching passwords off is a server setting on purpose: at go-live, IT sets LOCAL_LOGIN_ENABLED=false and names the emergency admins in BREAK_GLASS_USERS. People who only ever signed in with Microsoft have no password, so if you switch Microsoft sign-in off, an admin must set one for them.</p>
+</section>
+{% endblock %}

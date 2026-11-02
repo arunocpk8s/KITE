@@ -1,4 +1,4 @@
-"""Admin console: users, client accounts and members, mail server, email outbox, ServiceNow. Admins only."""
+"""Admin console: users, client accounts and members, mail server, email outbox, ServiceNow, Microsoft sign-in. Admins only."""
 import re
 
 from flask import Blueprint, abort, current_app, flash, g, redirect, render_template, request, url_for
@@ -6,6 +6,7 @@ from sqlalchemy import func
 
 import notify
 import servicenow
+import sso
 from config import DEPARTMENTS
 from models import (
     ROLE_LABELS, ROLES, Account, AccountMember, AdminEvent, EmailOutbox, ServiceNowConnection, Setting, User,
@@ -23,6 +24,8 @@ OUTBOX_STATUSES = ("PENDING", "SENT", "CANCELLED")
 HOST_RE = re.compile(r"^[A-Za-z0-9.-]{1,253}$")
 SERVER_KEYS = notify.SMTP_SETTING_KEYS + (notify.SMTP_PASSWORD_KEY,)
 USER_FIELDS = ("full_name", "email", "role", "department")
+# Only the tenant's ID will do: a person's token carries the ID, and sign-in compares the two.
+GUID_RE = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
 
 
 @bp.before_request
@@ -75,7 +78,7 @@ def _render_user_form(user, data, errors, status=200):
     return render_template(
         "admin/user_form.html", user=user, form=data, errors=errors, roles=ROLES, departments=DEPARTMENTS,
         accounts=Account.query.order_by(Account.active.desc(), Account.name).all(),
-        sso_enabled=current_app.config["SSO_ENABLED"],
+        sso_enabled=sso.enabled(),
     ), status
 
 
@@ -158,7 +161,7 @@ def new_user():
         errors["username"] = "This username is already taken."
     password = request.form.get("password", "")
     # With SSO the person signs in with Microsoft (linked by email), so a password is optional.
-    sso_only = current_app.config["SSO_ENABLED"] and not password and not request.form.get("password2")
+    sso_only = sso.enabled() and not password and not request.form.get("password2")
     password_error = None if sso_only else _validate_password(password, request.form.get("password2", ""))
     if password_error:
         errors["password"] = password_error
@@ -373,6 +376,95 @@ def remove_account_member(account_id, user_id):
     db.session.commit()
     flash(f"{username} removed from {account.code}.", "success")
     return redirect(url_for("admin.edit_account", account_id=account.id))
+
+
+# --- Microsoft sign-in ------------------------------------------------------------------------
+def _redirect_ok():
+    """Microsoft accepts plain http only for this PC."""
+    uri = sso.redirect_uri()
+    return uri.startswith("https://") or uri.startswith(("http://localhost", "http://127.0.0.1"))
+
+
+def _render_sign_in(form=None, errors=None, status=200):
+    values = sso.settings()
+    saved = Setting.query.filter(Setting.key.in_(sso.SETTING_KEYS)).count() > 0
+    return render_template(
+        "admin/sign_in.html", form=form or values, errors=errors or {}, live=sso.enabled(), saved=saved,
+        secret_status=values["secret_status"] if values["secret"] or values["secret_status"] == "unreadable" else "none",
+        redirect_uri=sso.redirect_uri(), redirect_ok=_redirect_ok(), local_login=current_app.config["LOCAL_LOGIN_ENABLED"],
+    ), status
+
+
+@bp.route("/sign-in")
+def sign_in():
+    return _render_sign_in()
+
+
+@bp.route("/sign-in", methods=["POST"])
+def sign_in_save():
+    form = {"tenant": request.form.get("AZURE_TENANT_ID", "").strip(), "client_id": request.form.get("AZURE_CLIENT_ID", "").strip(),
+            "enabled": request.form.get("SSO_ENABLED") == "1"}
+    secret = request.form.get("AZURE_CLIENT_SECRET", "").strip()
+    current = sso.settings()
+    has_secret = bool(secret or current["secret"])
+    errors = {}
+    if form["tenant"] and not GUID_RE.match(form["tenant"]) or (form["enabled"] and not form["tenant"]):
+        errors["tenant"] = "The tenant ID looks like 00000000-0000-0000-0000-000000000000, not a domain name."
+    if form["client_id"] and not GUID_RE.match(form["client_id"]) or (form["enabled"] and not form["client_id"]):
+        errors["client_id"] = "The client ID looks like 00000000-0000-0000-0000-000000000000."
+    if len(secret) > 500:
+        errors["secret"] = "This is too long for a client secret."
+    elif form["enabled"] and not has_secret:
+        errors["secret"] = "Enter the client secret."
+    if form["enabled"] and not _redirect_ok():
+        errors["enabled"] = "Microsoft sign-in needs an https address. Set APP_BASE_URL first."
+    if errors:
+        return _render_sign_in(form, errors, 400)
+    changes = []
+    if form["enabled"] != current["enabled"]:
+        changes.append("switched on" if form["enabled"] else "switched off")
+    if form["tenant"] != current["tenant"]:
+        changes.append("tenant changed")
+    if form["client_id"] != current["client_id"]:
+        changes.append("client ID changed")
+    if secret:
+        changes.append("secret changed")  # the event never holds the secret itself
+    if not changes:
+        flash("No changes.", "info")
+        return redirect(url_for("admin.sign_in"))
+    set_setting("SSO_ENABLED", "true" if form["enabled"] else "false", g.user)
+    set_setting("AZURE_TENANT_ID", form["tenant"], g.user)
+    set_setting("AZURE_CLIENT_ID", form["client_id"], g.user)
+    if secret:
+        set_setting(sso.SECRET_SETTING, notify.encrypt_secret(secret), g.user)
+    add_admin_event(g.user, "SSO_SETTINGS_UPDATED", "Microsoft sign-in", "; ".join(changes))
+    db.session.commit()
+    current_app.logger.info("Admin %s updated the Microsoft sign-in settings", g.user.username)
+    flash("Saved. Check the settings with Microsoft, then try signing in from a private browser window.", "success")
+    return redirect(url_for("admin.sign_in"))
+
+
+@bp.route("/sign-in/test", methods=["POST"])
+def sign_in_test():
+    error = sso.check_connection()
+    add_admin_event(g.user, "SSO_SETTINGS_CHECKED", "Microsoft sign-in", f"failed: {error}" if error else "accepted")
+    db.session.commit()
+    if error:
+        flash(error, "error")
+    else:
+        flash("Microsoft accepted the tenant, client ID and secret. Now try signing in from a private browser window: "
+              "that also checks the redirect URI.", "success")
+    return redirect(url_for("admin.sign_in"))
+
+
+@bp.route("/sign-in/reset", methods=["POST"])
+def sign_in_reset():
+    for key in sso.SETTING_KEYS:
+        delete_setting(key)
+    add_admin_event(g.user, "SSO_SETTINGS_RESET", "Microsoft sign-in", "using the server's settings again")
+    db.session.commit()
+    flash("Saved settings removed. KITE uses the server's settings again.", "success")
+    return redirect(url_for("admin.sign_in"))
 
 
 # --- mail server -----------------------------------------------------------------------------

@@ -20,7 +20,8 @@
     <h3>Purpose</h3>
     <p class="description">{{ shown.purpose }}</p>
     {% if shown.steps %}<h3>Steps</h3><p class="description">{{ shown.steps }}</p>{% endif %}
-    {% if shown.link %}<p><a class="button button-secondary" href="{{ shown.link }}" target="_blank" rel="noopener noreferrer">Open the SOP document</a></p>{% endif %}
+    <p>{% if shown.link %}<a class="button button-secondary" href="{{ shown.link }}" target="_blank" rel="noopener noreferrer">Open the SOP document</a>
+      {% endif %}<a class="button button-secondary" href="{{ url_for('sops.sop_pptx', code=account.code, sop_id=sop.id, v=shown.number) }}">Download as PowerPoint</a></p>
     {% if shown.change_note %}<p class="hint">What changed: {{ shown.change_note }}</p>{% endif %}
   </section>
 

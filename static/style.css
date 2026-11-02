@@ -549,3 +549,26 @@ button.gallery-card:hover { background: #fff; border-color: var(--primary); box-
 .board-move select { width: auto; flex: 1; padding: 4px 8px; font-size: 0.85rem; }
 .board-move button { margin-top: 0; }
 @media (max-width: 860px) { .board { grid-template-columns: minmax(0, 1fr); } .panel-button { display: inline-block; margin: 0 0 6px; } }
+
+/* Smaller quick actions; the projects of each track on the home page */
+.action-grid { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin-bottom: 20px; }
+.action-grid .home-card { gap: 12px; min-height: 0; padding: 8px 12px 8px 0; border-radius: 8px; }
+.action-grid .home-card-icon { width: 36px; height: 36px; border-radius: 6px; }
+.action-grid .home-card-icon .icon { width: 18px; height: 18px; }
+.action-grid .home-card-text { gap: 0; }
+.action-grid .home-card-text strong { font-size: 0.92rem; }
+.action-grid .home-card-text span { font-size: 0.78rem; }
+.action-grid .home-card-go { min-width: 0; padding: 4px 12px; border-radius: 4px; font-size: 0.82rem; }
+.track-projects { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+.track-list { margin-bottom: 0; padding: 14px 18px; }
+.track-list h2 { font-size: 1rem; margin: 0 0 6px; }
+.track-list .plain-list { margin: 0; }
+.track-list li { overflow-wrap: anywhere; }
+.new-chip { display: inline-block; padding: 0 7px; border-radius: 8px; background: var(--soft-mint); color: #1e6b34; font-size: 0.75rem; font-weight: 700; }
+.plain-steps { padding-left: 20px; margin: 6px 0 14px; }
+.plain-steps li { margin-bottom: 6px; }
+.copy-value { display: block; margin-top: 4px; padding: 6px 8px; background: #f4f6f9; border-radius: 6px; overflow-wrap: anywhere; user-select: all; }
+label.inline.sso-switch { display: flex; margin: 14px 0 0; }
+button.button-secondary { background: #fff; color: #3b4163; border: 1px solid #dfe2ee; }
+button.button-secondary:hover { background: #f3f4fb; color: var(--primary-dark); }
+@media (max-width: 860px) { .track-projects { grid-template-columns: minmax(0, 1fr); } }

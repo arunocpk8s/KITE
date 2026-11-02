@@ -14,6 +14,8 @@ Who may do what (checked on the server): members view; KT leads and admins manag
 checklist items, team and sign-off; any non-viewer member ticks checklist items and adds documents;
 KT leads, and the project's SMEs and receivers, run internal sessions.
 """
+from datetime import timedelta
+
 from flask import Blueprint, abort, flash, g, redirect, render_template, request, url_for
 from werkzeug.datastructures import MultiDict
 
@@ -73,6 +75,16 @@ def track_projects(track, accounts):
     projects = (KTProject.query.filter(KTProject.account_id.in_([a.id for a in accounts]), KTProject.workflow == track)
                 .order_by(KTProject.id.desc()).all())
     return [(p, project_state(p)) for p in projects]
+
+
+def latest_track_projects(accounts, limit=5, new_days=7):
+    """{track: [(project, is it new)]}: the newest projects of each track in the given accounts."""
+    ids = [a.id for a in accounts]
+    since = utcnow() - timedelta(days=new_days)
+    return {track: [(p, p.created_at is not None and p.created_at >= since)
+                    for p in KTProject.query.filter(KTProject.account_id.in_(ids), KTProject.workflow == track)
+                    .order_by(KTProject.id.desc()).limit(limit)]
+            for track in WORKFLOWS}
 
 
 def account_projects(account):

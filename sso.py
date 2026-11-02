@@ -5,6 +5,8 @@ Account rules:
 2. Email already in KITE, not yet linked            -> linked to that user (staff added in the console).
 3. Anyone else in the company tenant                -> new account with the default role (team member).
 Deactivated users are refused in every case. Role and client accounts always come from KITE, never from the token.
+
+The settings can be saved in the Admin console; those values come first, then the server's environment.
 """
 import logging
 import re
@@ -14,8 +16,9 @@ import requests
 from flask import current_app
 from sqlalchemy import func
 
+import notify
 from config import DEPARTMENTS
-from models import DEFAULT_ROLE, User, add_admin_event, db
+from models import DEFAULT_ROLE, User, add_admin_event, db, get_setting
 from timeutil import utcnow
 
 log = logging.getLogger(__name__)
@@ -23,14 +26,34 @@ log = logging.getLogger(__name__)
 SCOPES = ["User.Read"]  # openid, profile and offline_access are added by MSAL
 GRAPH_ME = "https://graph.microsoft.com/v1.0/me?$select=department"
 USERNAME_CHARS = re.compile(r"[^a-z0-9._-]")
+SECRET_SETTING = "AZURE_CLIENT_SECRET_ENC"
+SETTING_KEYS = ("SSO_ENABLED", "AZURE_TENANT_ID", "AZURE_CLIENT_ID", SECRET_SETTING)
 
 
 class SignInRefused(Exception):
     """Raised with a message that is safe to show to the person signing in."""
 
 
+def settings():
+    """Effective sign-in settings: Admin console values first, then the environment."""
+    cfg = current_app.config
+    values = {
+        "enabled": get_setting("SSO_ENABLED", "true" if cfg.get("SSO_ENABLED") else "false") == "true",
+        "tenant": get_setting("AZURE_TENANT_ID", cfg.get("AZURE_TENANT_ID") or ""),
+        "client_id": get_setting("AZURE_CLIENT_ID", cfg.get("AZURE_CLIENT_ID") or ""),
+    }
+    token = get_setting(SECRET_SETTING, None)
+    if token is None:
+        values["secret"], values["secret_status"] = cfg.get("AZURE_CLIENT_SECRET") or "", "env"
+    else:
+        secret = notify.decrypt_secret(token)
+        values["secret"], values["secret_status"] = secret or "", "saved" if secret is not None else "unreadable"
+    return values
+
+
 def enabled():
-    return bool(current_app.config.get("SSO_ENABLED"))
+    values = settings()
+    return values["enabled"] and values["secret_status"] != "unreadable"
 
 
 def redirect_uri():
@@ -38,7 +61,7 @@ def redirect_uri():
 
 
 def authority():
-    return f"https://login.microsoftonline.com/{current_app.config['AZURE_TENANT_ID']}"
+    return f"https://login.microsoftonline.com/{settings()['tenant']}"
 
 
 def logout_url(post_logout_redirect):
@@ -46,15 +69,37 @@ def logout_url(post_logout_redirect):
 
 
 def _client():
-    # MSAL caches tenant metadata in the client object; keep one per app.
-    client = current_app.extensions.get("kite_msal")
-    if client is None:
-        cfg = current_app.config
-        client = msal.ConfidentialClientApplication(
-            cfg["AZURE_CLIENT_ID"], authority=authority(), client_credential=cfg["AZURE_CLIENT_SECRET"],
-        )
-        current_app.extensions["kite_msal"] = client
-    return client
+    # MSAL caches tenant metadata in the client object; keep one per app, until an admin changes the settings.
+    values = settings()
+    key = (values["tenant"], values["client_id"], values["secret"])
+    cached = current_app.extensions.get("kite_msal")
+    if cached is None or cached[0] != key:
+        cached = (key, msal.ConfidentialClientApplication(values["client_id"], authority=authority(),
+                                                          client_credential=values["secret"]))
+        current_app.extensions["kite_msal"] = cached
+    return cached[1]
+
+
+def check_connection():
+    """Ask Microsoft whether the saved tenant, client ID and secret work. Returns a message if not, else None.
+    It cannot tell whether the redirect URI is registered; only a real sign-in shows that."""
+    values = settings()
+    if not (values["tenant"] and values["client_id"] and values["secret"]):
+        return "Enter the tenant ID, client ID and client secret, and save them first."
+    try:
+        result = msal.ConfidentialClientApplication(
+            values["client_id"], authority=authority(), client_credential=values["secret"],
+        ).acquire_token_for_client(scopes=["https://graph.microsoft.com/.default"])
+    except (ValueError, requests.RequestException) as exc:
+        log.warning("Could not check the SSO settings: %s", exc)
+        return "Could not reach Microsoft, or it does not know this tenant. Check the tenant ID and try again."
+    if "access_token" in result:
+        return None
+    error = result.get("error", "unknown")
+    if error in ("invalid_client", "unauthorized_client"):
+        return "Microsoft refused the client ID or secret. Check them, and that the secret has not expired."
+    log.warning("SSO check refused: %s", error)
+    return f"Microsoft refused ({error}). Ask IT to check the app registration."
 
 
 def start_flow():
@@ -91,7 +136,7 @@ def _new_username(email):
 
 def user_from_claims(claims, department=""):
     """Find, link or create the KITE user for validated ID token claims. Commits. Raises SignInRefused."""
-    tenant = current_app.config["AZURE_TENANT_ID"].lower()
+    tenant = settings()["tenant"].lower()
     if (claims.get("tid") or "").lower() != tenant:
         log.warning("SSO refused: token from tenant %s", claims.get("tid"))
         raise SignInRefused("Sign in with your company Microsoft account.")

@@ -10,11 +10,14 @@ Who may do what (checked on the server): members view; SMEs and KT leads write S
 lead submits a version for review; KT leads approve, send back, retire and mark reviews, and may not
 approve a version they wrote themselves (admins may). KT leads edit the scope of work.
 """
+from io import BytesIO
+
 import click
-from flask import Blueprint, abort, flash, g, redirect, render_template, request, url_for
+from flask import Blueprint, abort, flash, g, redirect, render_template, request, send_file, url_for
 from sqlalchemy import func
 
 import notify
+import sop_slides
 from auth import login_required
 from kt import URL_RE, members_of, visible_account_or_404
 from models import (
@@ -219,14 +222,29 @@ def edit_sop(code, sop_id):
 
 
 # --- view ----------------------------------------------------------------------------------------
+def _version_asked_for(sop):
+    """The version named in ?v=, else the approved one, else the latest."""
+    wanted = request.args.get("v", "")
+    shown = next((v for v in sop.versions if str(v.number) == wanted), None) if wanted else None
+    return shown or sop.approved_version or sop.versions[-1]
+
+
+@bp.route("/sops/<int:sop_id>/slides.pptx")
+@login_required
+def sop_pptx(code, sop_id):
+    account = visible_account_or_404(code)
+    sop = _sop_or_404(account, sop_id)
+    version = _version_asked_for(sop)
+    return send_file(BytesIO(sop_slides.build(sop, version)), as_attachment=True, download_name=sop_slides.filename(sop, version),
+                     mimetype="application/vnd.openxmlformats-officedocument.presentationml.presentation")
+
+
 @bp.route("/sops/<int:sop_id>")
 @login_required
 def sop(code, sop_id):
     account = visible_account_or_404(code)
     sop = _sop_or_404(account, sop_id)
-    wanted = request.args.get("v", "")
-    shown = next((v for v in sop.versions if str(v.number) == wanted), None) if wanted else None
-    shown = shown or sop.approved_version or sop.versions[-1]
+    shown = _version_asked_for(sop)
     manager = g.user.can_manage(account)
     working = sop.working_version
     return render_template(

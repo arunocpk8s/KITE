@@ -53,6 +53,24 @@
   {% endif %}
 
   {% if accounts %}
+  <section class="track-projects" aria-label="Projects">
+    {% for key, name in tracks.items() %}
+    <div class="card track-list">
+      <div class="home-section-head"><h2>{{ name }}</h2> <a href="{{ url_for('main.track', track=key) }}">All</a></div>
+      {% if track_lists[key] %}
+      <ul class="plain-list">
+        {% for p, is_new in track_lists[key] %}
+        <li><a href="{{ url_for('projects.project', code=p.account.code, project_id=p.id) }}">{{ p.name }}</a>
+          <span class="account-chip">{{ p.account.code }}</span>{% if is_new %} <span class="new-chip">New</span>{% endif %}</li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="muted">No projects yet.</p>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </section>
+
   <div class="home-section-head">
     <h2>Insights</h2>
     <a href="{{ url_for('reports.overview') }}">All reports</a>

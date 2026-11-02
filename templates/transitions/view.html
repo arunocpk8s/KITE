@@ -3,7 +3,7 @@
 {% block content %}
 <p><a href="{{ url_for('projects.project', code=account.code, project_id=project.id) }}">&larr; {{ project.name }}</a></p>
 <h1>Transition plan <span class="muted">· {{ project.name }}</span>
-  {% if not current %}<span class="stage stage-COMPLETE">Steady state reached</span>{% endif %}</h1>
+  {% if not current %}<span class="stage stage-COMPLETE">{{ project.phases[-1].label }} reached</span>{% endif %}</h1>
 
 <ol class="steps">
   {% for p in project.phases %}

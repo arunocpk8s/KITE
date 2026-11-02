@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}{{ transcript.title }} · {{ project.name }} · {{ app_name }}{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('projects.project', code=account.code, project_id=project.id) }}#meetings">&larr; {{ project.name }}</a></p>
+<h1>{{ transcript.title }}</h1>
+<p class="muted">{% if transcript.meeting_date %}{{ transcript.meeting_date | date }} · {% endif %}Read with {{ transcript.method_label }} · added by {{ transcript.uploaded_by.full_name }}
+  {% if transcript.recording_link %} · <a href="{{ transcript.recording_link }}" target="_blank" rel="noopener noreferrer">Recording</a>{% endif %}</p>
+
+<section class="card">
+  <h2>Where these go</h2>
+  <ul class="plain-list">
+    <li>ServiceNow: {% if snow %}<span class="tick">&#10003;</span> {{ snow.instance }}, as drafts{% else %}<span class="pending">&#9675;</span> not connected, so KB articles cannot be created yet{% endif %}</li>
+    <li>SharePoint: {% if sharepoint_ready %}<span class="tick">&#10003;</span> the project's KT folder{% elif sharepoint_on %}<span class="pending">&#9675;</span> add the project's KT folder link first{% else %}<span class="pending">&#9675;</span> off, so documents are downloaded from KITE{% endif %}</li>
+  </ul>
+</section>
+
+{% set open_items = transcript.items | rejectattr('created_at') | list %}
+{% set done_items = transcript.items | selectattr('created_at') | list %}
+
+{% if open_items %}
+<section class="card">
+  <h2>Proposed ({{ open_items | length }})</h2>
+  {% if can_manage %}
+  <p class="hint">Change anything that is wrong and untick what you do not want. Sign-ins are unticked until you choose them, because they give someone access.</p>
+  <form method="post" action="{{ url_for('meetings.create', code=account.code, project_id=project.id, transcript_id=transcript.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% for item in open_items %}
+    {% set admin_only = item.kind == 'ACCESS' and not g.user.is_admin %}
+    <fieldset class="checklist">
+      <legend><label class="inline"><input type="checkbox" name="item-{{ item.id }}" value="1" {% if item.kind != 'ACCESS' %}checked{% endif %} {% if admin_only %}disabled{% endif %}> {{ item.kind_label }}</label></legend>
+      {% if admin_only %}<p class="hint">An admin creates sign-ins. Ask an admin to open this page.</p>{% endif %}
+      {% if item.error %}<p class="error">{{ item.error }}</p>{% endif %}
+      <label for="title-{{ item.id }}">Title</label>
+      <input id="title-{{ item.id }}" name="title-{{ item.id }}" value="{{ item.title }}" maxlength="300">
+      <label for="detail-{{ item.id }}">Detail</label>
+      <textarea id="detail-{{ item.id }}" name="detail-{{ item.id }}" rows="{{ 6 if item.detail | length > 200 else 2 }}">{{ item.detail }}</textarea>
+    </fieldset>
+    {% endfor %}
+    <button type="submit">Create the selected items</button>
+  </form>
+  {% else %}
+  <ul class="plain-list">
+    {% for item in open_items %}<li><span class="doc-type">{{ item.kind_label }}</span> {{ item.title }}</li>{% endfor %}
+  </ul>
+  {% endif %}
+</section>
+{% elif not done_items %}
+<section class="card"><p class="muted">Nothing was found in this transcript.{% if transcript.method == 'RULES' %} The rules only catch plainly stated items, such as "in scope" or "step 1".{% endif %}</p></section>
+{% endif %}
+
+{% if done_items %}
+<section class="card">
+  <h2>Created ({{ done_items | length }})</h2>
+  <ul class="plain-list">
+    {% for item in done_items %}
+    <li><span class="tick">&#10003;</span> <span class="doc-type">{{ item.kind_label }}</span> {{ item.title }}
+      <br><span class="muted">{% if item.result_url %}<a href="{{ item.result_url }}">{{ item.result_label }}</a>{% else %}{{ item.result_label }}{% endif %} · by {{ item.created_by.full_name }}, {{ item.created_at | ist }}
+        {% if item.kind in document_kinds %} · <a href="{{ url_for('meetings.document', code=account.code, project_id=project.id, transcript_id=transcript.id, item_id=item.id) }}">Word document</a>{% endif %}</span></li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+<section class="card">
+  <details>
+    <summary>Transcript</summary>
+    <p class="description">{{ transcript.text }}</p>
+  </details>
+  {% if can_manage %}
+  <form method="post" action="{{ url_for('meetings.delete', code=account.code, project_id=project.id, transcript_id=transcript.id) }}" data-confirm="Remove this transcript from KITE? Items already created stay where they are.">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="danger">Remove the transcript</button>
+  </form>
+  {% endif %}
+</section>
+{% endblock %}

@@ -29,6 +29,8 @@
     <label for="description">Description (engagement, services, locations)</label>
     <textarea id="description" name="description" rows="4" maxlength="2000">{{ form.description }}</textarea>
     {% if errors.description %}<p class="error">{{ errors.description }}</p>{% endif %}
+    <label class="inline"><input type="checkbox" name="ai_transcripts" value="1" {% if form.ai_transcripts %}checked{% endif %}> Meeting transcripts of this client may be sent to the Claude API (Anthropic)</label>
+    <p class="hint">Off: KITE reads transcripts with its own rules and nothing leaves KITE. Turn on only if the client's contract allows it.</p>
     <button type="submit">{{ "Save changes" if account else "Create account" }}</button>
     <a href="{{ url_for('admin.accounts') }}">Cancel</a>
   </form>

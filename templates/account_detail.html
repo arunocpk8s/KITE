@@ -39,13 +39,13 @@
     <tbody>
       {% for p, s in projects %}
       <tr>
-        <td><a href="{{ url_for('projects.project', code=account.code, project_id=p.id) }}">{{ p.name }}</a></td>
+        <td><a href="{{ url_for('projects.project', code=account.code, project_id=p.id) }}">{{ p.name }}</a>{% if p.is_internal %} <span class="doc-type">Existing Project KT</span>{% endif %}</td>
         <td><span class="stage stage-{{ s.stage }}">{{ s.stage_label }}</span></td>
         <td><span class="progress progress-wide" title="{{ s.progress }}%"><span style="width: {{ s.progress }}%"></span></span> {{ s.signed_off }}/{{ s.topics }}</td>
         <td>{{ s.checklist_done }}/{{ s.checklist_total }}</td>
         <td>{% if p.client_signed %}{{ p.client_signed_at | ist }}{% else %}<span class="muted">Not yet</span>{% endif %}</td>
         <td>{% if s.team_total %}{{ s.team_done }}/{{ s.team_total }}{% else %}<span class="muted">No team set</span>{% endif %}</td>
-        <td>{% set cur = p.phases | selectattr('status', 'ne', 'SIGNED_OFF') | first %}{% if not p.phases %}<span class="muted">—</span>{% elif cur %}{{ cur.label }} <span class="muted">({{ cur.status_label | lower }})</span>{% else %}<span class="stage stage-COMPLETE">Steady state</span>{% endif %}</td>
+        <td>{% set cur = p.phases | selectattr('status', 'ne', 'SIGNED_OFF') | first %}{% if not p.phases %}<span class="muted">—</span>{% elif cur %}{{ cur.label }} <span class="muted">({{ cur.status_label | lower }})</span>{% else %}<span class="stage stage-COMPLETE">{{ p.phases[-1].label }}</span>{% endif %}</td>
         <td>{{ p.target_date | date or "—" }}</td>
       </tr>
       {% endfor %}

@@ -3,6 +3,19 @@
 {% block content %}
 <h1 class="greeting">Hello, {{ g.user.full_name.split(' ')[0] }}</h1>
 
+<nav class="track-grid" aria-label="Tracks">
+  <a class="track-button" href="{{ url_for('main.track', track='CLIENT_KT') }}">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v16"/><path d="M15 10h4a1 1 0 0 1 1 1v10"/><path d="M2 21h20"/><path d="M8 8h3M8 12h3M8 16h3"/></svg>
+    <span>{{ tracks.CLIENT_KT }}</span>
+    <svg class="track-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+  </a>
+  <a class="track-button" href="{{ url_for('main.track', track='INTERNAL_KT') }}">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M12 11v5M9.5 13.5h5"/></svg>
+    <span>{{ tracks.INTERNAL_KT }}</span>
+    <svg class="track-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+  </a>
+</nav>
+
 <div class="home-grid">
 <section class="card card-soft card-steps">
   <h2>My next steps {% if steps %}<span class="tab-count">{{ steps | length }}</span>{% endif %}</h2>

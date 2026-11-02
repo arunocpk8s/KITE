@@ -21,7 +21,7 @@ import notify
 from auth import login_required
 from kt import TIME_RE, URL_RE, members_of, visible_account_or_404
 from models import (
-    DEFAULT_CHECKLIST, DOC_TYPES, InternalSession, KTProject, KTTopic, ProjectChecklistItem, ProjectDocument,
+    DEFAULT_CHECKLIST, DEFAULT_WORKFLOW, DOC_TYPES, INTERNAL_CHECKLIST, WORKFLOWS, InternalSession, KTProject, KTTopic, ProjectChecklistItem, ProjectDocument,
     ProjectTeamMember, User, add_project_event, db, ensure_phases,
 )
 from timeutil import format_ist, ist_local_to_utc, parse_date, utcnow
@@ -66,6 +66,13 @@ def project_state(project):
         "kt_done": kt_done, "ready": kt_done and checklist_done and not project.client_signed,
         "stage": stage, "stage_label": STAGES[stage],
     }
+
+
+def track_projects(track, accounts):
+    """The projects of one track in the given accounts, newest first, with their state."""
+    projects = (KTProject.query.filter(KTProject.account_id.in_([a.id for a in accounts]), KTProject.workflow == track)
+                .order_by(KTProject.id.desc()).all())
+    return [(p, project_state(p)) for p in projects]
 
 
 def account_projects(account):
@@ -131,6 +138,7 @@ def _read_project(form):
     return {
         "name": " ".join(form.get("name", "").split()),
         "description": form.get("description", "").strip(),
+        "workflow": form.get("workflow", DEFAULT_WORKFLOW),
         "start_date": form.get("start_date", "").strip(),
         "target_date": form.get("target_date", "").strip(),
         "sharepoint_url": form.get("sharepoint_url", "").strip(),
@@ -144,6 +152,8 @@ def _validate_project(account, data):
     errors = {}
     if not data["name"] or len(data["name"]) > 200:
         errors["name"] = "Enter a project name (up to 200 characters)."
+    if data["workflow"] not in WORKFLOWS:
+        errors["workflow"] = "Choose the workflow."
     if len(data["description"]) > 4000:
         errors["description"] = "At most 4,000 characters."
     start, target = parse_date(data["start_date"]), parse_date(data["target_date"])
@@ -168,7 +178,7 @@ def _validate_project(account, data):
 
 def _render_form(account, project, data, errors, status=200):
     return render_template(
-        "projects/project_form.html", account=account, project=project, form=data, errors=errors,
+        "projects/project_form.html", account=account, project=project, form=data, errors=errors, workflows=WORKFLOWS,
         people=[u for u in members_of(account) if u.role != "viewer"],
     ), status
 
@@ -195,21 +205,24 @@ def new_project(code):
     account = visible_account_or_404(code)
     _require(g.user.can_manage(account))
     if request.method == "GET":
-        return _render_form(account, None, _read_project(MultiDict()), {})
+        data = _read_project(MultiDict())
+        if request.args.get("track") in WORKFLOWS:
+            data["workflow"] = request.args["track"]
+        return _render_form(account, None, data, {})
     data = _read_project(request.form)
     errors = _validate_project(account, data)
     if errors:
         return _render_form(account, None, data, errors, 400)
     position = len(KTProject.query.filter_by(account_id=account.id).all()) + 1
-    project = KTProject(account_id=account.id, position=position, created_at=utcnow())
+    project = KTProject(account_id=account.id, position=position, workflow=data["workflow"], created_at=utcnow())
     _apply_project(project, data)
-    for i, title in enumerate(DEFAULT_CHECKLIST, start=1):
+    for i, title in enumerate(INTERNAL_CHECKLIST if project.is_internal else DEFAULT_CHECKLIST, start=1):
         project.checklist.append(ProjectChecklistItem(title=title, position=i))
     ensure_phases(project)
     db.session.add(project)
     add_project_event(project, g.user, "CREATED")
     db.session.commit()
-    flash(f"Project '{project.name}' added with the standard hand-over checklist. Add its KT modules next.",
+    flash(f"Project '{project.name}' added with the checklist and phases of its workflow. Add its KT modules next.",
           "success")
     return _back(project)
 
@@ -225,8 +238,10 @@ def edit_project(code, project_id):
                 for f in ("name", "description", "start_date", "target_date", "sharepoint_url",
                           "client_approver_name", "client_approver_email")}
         data["team_ids"] = sorted(m.user_id for m in project.team)
+        data["workflow"] = project.workflow
         return _render_form(account, project, data, {})
     data = _read_project(request.form)
+    data["workflow"] = project.workflow  # chosen when the project is added
     errors = _validate_project(account, data)
     if errors:
         return _render_form(account, project, data, errors, 400)

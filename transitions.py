@@ -178,7 +178,7 @@ def sign_off(code, project_id, phase_id):
     following = _next(phase)
     notify.send(_team_emails(project), f"[{account.code}] {project.name}: {phase.label} signed off",
                 _body(project, f"{g.user.full_name} signed off the {phase.label} phase."
-                      + (f" Next: {following.label}." if following else " The transition is complete: steady state.")))
+                      + (f" Next: {following.label}." if following else f" The transition is complete: {phase.label.lower()}.")))
     flash(f"{phase.label} signed off." + (f" You can start {following.label} now." if following
                                           else " The transition is complete."), "success")
     return _back(project)

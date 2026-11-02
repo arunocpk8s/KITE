@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Add a transcript · {{ project.name }} · {{ app_name }}{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('projects.project', code=account.code, project_id=project.id) }}#meetings">&larr; {{ project.name }}</a></p>
+
+<section class="card narrow-form">
+  <h2>Add a meeting transcript</h2>
+  <p class="hint">KITE reads it and proposes scope of work, RACI, SOPs, runbooks, KB articles, access and open questions. You check them before anything is created.</p>
+  <form method="post" enctype="multipart/form-data" action="{{ url_for('meetings.new', code=account.code, project_id=project.id) }}" novalidate>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label for="title">Meeting</label>
+    <input id="title" name="title" value="{{ form.title }}" maxlength="200" placeholder="e.g. Month-end close KT, session 2" required autofocus>
+    {% if errors.title %}<p class="error">{{ errors.title }}</p>{% endif %}
+    <div class="row">
+      <div><label for="meeting_date">Date</label><input id="meeting_date" name="meeting_date" type="date" value="{{ form.meeting_date }}">
+        {% if errors.meeting_date %}<p class="error">{{ errors.meeting_date }}</p>{% endif %}</div>
+      <div><label for="recording_link">Recording link (optional)</label><input id="recording_link" name="recording_link" value="{{ form.recording_link }}" maxlength="500" placeholder="https://...">
+        {% if errors.recording_link %}<p class="error">{{ errors.recording_link }}</p>{% endif %}</div>
+    </div>
+    <label for="file">Transcript file</label>
+    <input id="file" name="file" type="file" accept=".vtt,.docx,.txt,.md">
+    <p class="hint">In Teams or Zoom, download the transcript as .vtt or .docx. 2 MB at most.</p>
+    <label for="pasted">Or paste the text</label>
+    <textarea id="pasted" name="pasted" rows="6">{{ form.pasted }}</textarea>
+    {% if errors.file %}<p class="error">{{ errors.file }}</p>{% endif %}
+
+    <fieldset class="checklist">
+      <legend>How to read it</legend>
+      <label class="inline"><input type="radio" name="method" value="RULES" {% if form.method != 'AI' %}checked{% endif %}> KITE rules: nothing leaves KITE, but it only finds what is said plainly</label>
+      {% if ai_available %}
+      <label class="inline"><input type="radio" name="method" value="AI" {% if form.method == 'AI' %}checked{% endif %}> Claude AI: much better on natural speech; the transcript is sent to Anthropic</label>
+      {% elif ai_consented %}
+      <p class="hint">Claude AI is allowed for this account, but no API key is set on the server.</p>
+      {% else %}
+      <p class="hint">Claude AI is off for this account. An admin can allow it on the client account page if the contract permits.</p>
+      {% endif %}
+      {% if errors.method %}<p class="error">{{ errors.method }}</p>{% endif %}
+    </fieldset>
+    <button type="submit">Read the transcript</button>
+  </form>
+</section>
+{% endblock %}

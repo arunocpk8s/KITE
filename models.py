@@ -94,6 +94,8 @@ class Account(db.Model):
     contract_start = db.Column(db.Date)
     contract_end = db.Column(db.Date)
     scope_link = db.Column(db.String(500), nullable=False, default="", server_default="")
+    # An admin's choice: meeting transcripts of this client may be sent to the Claude API for extraction.
+    ai_transcripts = db.Column(db.Boolean, nullable=False, default=False, server_default=sa.false())
 
     members = db.relationship("AccountMember", back_populates="account", cascade="all, delete-orphan",
                               order_by="AccountMember.id")
@@ -327,11 +329,33 @@ def add_kt_event(topic, actor, event_type, old_value=None, new_value=None, comme
 
 # --- Projects: KT checklist, client sign-off, internal KT and KT documents -----------------------
 # Checklist items every new project starts with; the KT lead can change them.
+# A project follows one of two tracks, chosen when it is added.
+WORKFLOWS = {
+    "CLIENT_KT": "New Client Transaction KT",
+    "INTERNAL_KT": "Existing Project KT",
+}
+DEFAULT_WORKFLOW = "CLIENT_KT"
 DEFAULT_CHECKLIST = (
+    "Scope of work agreed with the client",
+    "RACI agreed with the client",
     "Access to the client's systems and tools granted to the team",
-    "KT documents and recordings saved in the SharePoint KT folder",
-    "Runbooks and SOPs handed over",
+    "KT sessions recorded, with recordings and transcripts in the SharePoint KT folder",
+    "KT documents saved in the SharePoint KT folder",
+    "Runbooks handed over",
+    "SOPs handed over",
     "Contacts and escalation matrix shared",
+    "Open issues, backlog and known problems handed over",
+)
+INTERNAL_CHECKLIST = (
+    "Current scope of work reviewed with the new team members",
+    "RACI updated with the new team members",
+    "Sign-in (SSO) and access to the project's tools granted to the new team members",
+    "Internal KT sessions recorded, with recordings and transcripts in the SharePoint KT folder",
+    "Existing KT documents reviewed and gaps closed",
+    "Runbooks reviewed and up to date",
+    "SOPs reviewed and up to date",
+    "Buddy and learning path assigned to each new team member",
+    "Contacts and escalation matrix updated",
     "Open issues, backlog and known problems handed over",
 )
 DOC_TYPES = ("KT deck", "Recording", "Runbook", "SOP", "Process document", "Architecture", "Other")
@@ -347,6 +371,7 @@ class KTProject(db.Model):
     account_id = db.Column(db.Integer, db.ForeignKey("accounts.id"), nullable=False, index=True)
     name = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text, nullable=False, default="")
+    workflow = db.Column(db.String(20), nullable=False, default=DEFAULT_WORKFLOW, server_default=DEFAULT_WORKFLOW)
     start_date = db.Column(db.Date)
     target_date = db.Column(db.Date)
     # The project's KT folder in SharePoint (or Teams files).
@@ -379,6 +404,16 @@ class KTProject(db.Model):
                              passive_deletes="all")
     phases = db.relationship("TransitionPhase", back_populates="project", cascade="all, delete-orphan",
                              order_by="TransitionPhase.position")
+    transcripts = db.relationship("MeetingTranscript", back_populates="project", cascade="all, delete-orphan",
+                                  order_by="MeetingTranscript.id.desc()")
+
+    @property
+    def is_internal(self):
+        return self.workflow == "INTERNAL_KT"
+
+    @property
+    def workflow_label(self):
+        return WORKFLOWS[self.workflow or DEFAULT_WORKFLOW]
 
     @property
     def topics(self):
@@ -651,6 +686,8 @@ TRANSITION_PHASES = {
     "REVERSE_SHADOW": "Reverse shadow",
     "STEADY_STATE": "Steady state",
 }
+# The internal workflow uses the same four phases; its KT comes from the current team and it ends in onboarding.
+INTERNAL_PHASE_LABELS = {"KT": "Internal KT", "STEADY_STATE": "Onboarded to the team"}
 PHASE_STATUS_LABELS = {"NOT_STARTED": "Not started", "IN_PROGRESS": "In progress", "SIGNED_OFF": "Signed off"}
 DEFAULT_EXIT_CRITERIA = {
     "KT": ("Access to all systems in place for the whole team",
@@ -664,6 +701,18 @@ DEFAULT_EXIT_CRITERIA = {
     "STEADY_STATE": ("Hypercare period completed",
                      "Escalation path and on-call agreed",
                      "Steady-state reporting agreed with the client"),
+}
+INTERNAL_EXIT_CRITERIA = {
+    "KT": ("Access to all systems in place for the new team members",
+           "Internal KT recordings and documents in the SharePoint KT folder"),
+    "SHADOW": ("New team members shadowed the current team on live work for the agreed period",
+               "Doubts raised during shadowing resolved"),
+    "REVERSE_SHADOW": ("New team members ran the work with the current team watching",
+                       "SLAs met during reverse shadow",
+                       "Current team confirms they can run the work independently"),
+    "STEADY_STATE": ("Learning path completed by each new team member",
+                     "New team members added to the rota and escalation matrix",
+                     "Client told the new team members are on the team"),
 }
 
 
@@ -691,6 +740,8 @@ class TransitionPhase(db.Model):
 
     @property
     def label(self):
+        if self.project is not None and self.project.is_internal and self.phase in INTERNAL_PHASE_LABELS:
+            return INTERNAL_PHASE_LABELS[self.phase]
         return TRANSITION_PHASES[self.phase]
 
     @property
@@ -725,12 +776,85 @@ def ensure_phases(project):
     """Give the project its four transition phases with the default exit criteria (once). True if added."""
     if project.phases:
         return False
+    criteria = INTERNAL_EXIT_CRITERIA if project.is_internal else DEFAULT_EXIT_CRITERIA
     for i, key in enumerate(TRANSITION_PHASES, start=1):
         phase = TransitionPhase(phase=key, position=i)
-        for j, title in enumerate(DEFAULT_EXIT_CRITERIA[key], start=1):
+        for j, title in enumerate(criteria[key], start=1):
             phase.criteria.append(ExitCriterion(title=title, position=j))
         project.phases.append(phase)
     return True
+
+
+# --- Meeting transcripts -------------------------------------------------------------------------
+# What KITE proposes from a transcript, and where each kind goes when it is created.
+TRANSCRIPT_ITEM_KINDS = {
+    "IN_SCOPE": "Scope of work: in scope",
+    "OUT_OF_SCOPE": "Scope of work: out of scope",
+    "SLA": "Scope of work: service level",
+    "RESPONSIBILITY": "RACI",
+    "CONTACT": "Contact",
+    "SOP": "SOP (draft)",
+    "RUNBOOK": "Runbook (document)",
+    "KB": "ServiceNow KB article (draft)",
+    "DOUBT": "Open question (doubt)",
+    "ACCESS": "SSO sign-in and account access",
+    "NOTES": "Meeting notes (document)",
+}
+TRANSCRIPT_METHODS = {"RULES": "KITE rules", "AI": "Claude AI"}
+
+
+class MeetingTranscript(db.Model):
+    """The transcript of a KT meeting, and what was proposed from it."""
+
+    __tablename__ = "meeting_transcripts"
+
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.Integer, db.ForeignKey("kt_projects.id"), nullable=False, index=True)
+    title = db.Column(db.String(200), nullable=False)
+    meeting_date = db.Column(db.Date)
+    recording_link = db.Column(db.String(500), nullable=False, default="")
+    text = db.Column(db.Text, nullable=False)
+    method = db.Column(db.String(10), nullable=False, default="RULES")
+    uploaded_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+
+    project = db.relationship("KTProject", back_populates="transcripts")
+    uploaded_by = db.relationship("User")
+    items = db.relationship("TranscriptItem", back_populates="transcript", cascade="all, delete-orphan",
+                            order_by="TranscriptItem.id")
+
+    @property
+    def method_label(self):
+        return TRANSCRIPT_METHODS[self.method]
+
+    @property
+    def created_count(self):
+        return sum(1 for i in self.items if i.created_at)
+
+
+class TranscriptItem(db.Model):
+    """One thing proposed from a transcript. Nothing exists outside this table until someone creates it."""
+
+    __tablename__ = "transcript_items"
+
+    id = db.Column(db.Integer, primary_key=True)
+    transcript_id = db.Column(db.Integer, db.ForeignKey("meeting_transcripts.id"), nullable=False, index=True)
+    kind = db.Column(db.String(20), nullable=False)
+    title = db.Column(db.String(300), nullable=False)
+    detail = db.Column(db.Text, nullable=False, default="")
+    # Set once created: where it went. A failed attempt keeps only the error, so it can be tried again.
+    created_at = db.Column(db.DateTime)
+    created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    result_label = db.Column(db.String(300), nullable=False, default="")
+    result_url = db.Column(db.String(500), nullable=False, default="")
+    error = db.Column(db.String(500), nullable=False, default="")
+
+    transcript = db.relationship("MeetingTranscript", back_populates="items")
+    created_by = db.relationship("User")
+
+    @property
+    def kind_label(self):
+        return TRANSCRIPT_ITEM_KINDS[self.kind]
 
 
 # --- Transactions and change log -----------------------------------------------------------------
@@ -1202,6 +1326,8 @@ ADDED_COLUMNS = [
     ("kt_modules", "project_id", "INTEGER REFERENCES kt_projects(id)"),
     ("kt_receivers", "confirmed_at", "TIMESTAMP"),
     ("kt_receivers", "confirm_note", "TEXT NOT NULL DEFAULT ''"),
+    ("kt_projects", "workflow", "VARCHAR(20) NOT NULL DEFAULT 'CLIENT_KT'"),
+    ("accounts", "ai_transcripts", "BOOLEAN NOT NULL DEFAULT FALSE"),
 ]
 
 

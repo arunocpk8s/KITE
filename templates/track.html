@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}{{ track_name }} · {{ app_name }}{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('main.dashboard') }}">&larr; Home</a></p>
+<div class="module-head">
+  <h1>{{ track_name }}</h1>
+  {% if startable %}
+  <form class="track-start push-right" method="get" action="{{ url_for('main.start_track', track=track) }}">
+    {% if startable | length > 1 %}
+    <select name="account" aria-label="Client account">
+      {% for a in startable %}<option value="{{ a.code }}">{{ a.code }} · {{ a.name }}</option>{% endfor %}
+    </select>
+    {% else %}
+    <input type="hidden" name="account" value="{{ startable[0].code }}">
+    {% endif %}
+    <button type="submit">Add project</button>
+  </form>
+  {% endif %}
+</div>
+
+<section class="card">
+  {% if rows %}
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Project</th><th>Account</th><th>Stage</th><th>KT signed off</th><th>Transition</th><th>Target</th></tr></thead>
+    <tbody>
+      {% for p, s in rows %}
+      <tr>
+        <td><a href="{{ url_for('projects.project', code=p.account.code, project_id=p.id) }}">{{ p.name }}</a></td>
+        <td><span class="account-chip">{{ p.account.code }}</span></td>
+        <td><span class="stage stage-{{ s.stage }}">{{ s.stage_label }}</span></td>
+        <td>{{ s.signed_off }}/{{ s.topics }}</td>
+        <td>{% set cur = p.phases | selectattr('status', 'ne', 'SIGNED_OFF') | first %}{% if not p.phases %}<span class="muted">—</span>{% elif cur %}{{ cur.label }}{% else %}{{ p.phases[-1].label }}{% endif %}</td>
+        <td>{{ p.target_date | date or "—" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <p class="muted">No projects on this track yet.</p>
+  {% endif %}
+</section>
+{% endblock %}

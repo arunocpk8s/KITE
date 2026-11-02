@@ -5,7 +5,7 @@ import re
 import traceback
 
 import click
-from flask import Blueprint, Flask, current_app, g, jsonify, render_template
+from flask import Blueprint, Flask, abort, current_app, g, jsonify, redirect, render_template, request, url_for
 from flask_wtf.csrf import CSRFProtect
 from sqlalchemy import text
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -16,7 +16,7 @@ import sops
 from doubts import bp as doubts_bp
 from kt import bp as kt_bp
 from kt import my_kt, plan_stats, visible_account_or_404
-from projects import account_projects
+from projects import account_projects, track_projects
 from projects import bp as projects_bp
 from nextsteps import next_steps, upcoming_internal_sessions
 from reports import bp as reports_bp
@@ -24,12 +24,13 @@ from transactions import bp as transactions_bp
 from transitions import bp as transitions_bp
 from knowledge import bp as knowledge_bp
 from onboarding import bp as onboarding_bp
+import meetings
 import servicenow
 import tasks
 from auth import bp as auth_bp
 from auth import login_required
 from config import DEPARTMENTS, Config
-from models import ROLE_LABELS, ROLES, Account, AccountMember, Change, Question, Transaction, User, db, upgrade_schema
+from models import ROLE_LABELS, ROLES, WORKFLOWS, Account, AccountMember, Change, Question, Transaction, User, db, upgrade_schema
 from timeutil import format_date, format_ist
 
 MIN_PASSWORD_LENGTH = 8
@@ -89,6 +90,7 @@ def create_app(test_config=None):
     app.register_blueprint(onboarding_bp)
     app.register_blueprint(knowledge_bp)
     app.register_blueprint(servicenow.bp)
+    app.register_blueprint(meetings.bp)
     app.register_blueprint(tasks.bp)
     csrf.exempt(tasks.bp)  # called by a scheduler with a bearer secret, not a browser form
     app.jinja_env.filters["ist"] = format_ist
@@ -235,7 +237,26 @@ def dashboard():
     topics, upcoming = my_kt(g.user)
     return render_template("dashboard.html", accounts=[(a, plan_stats(a)) for a in accounts],
                            my_topics=topics, upcoming=upcoming, steps=next_steps(g.user),
-                           internal=upcoming_internal_sessions(g.user))
+                           internal=upcoming_internal_sessions(g.user), tracks=WORKFLOWS)
+
+
+@bp.route("/tracks/<track>")
+@login_required
+def track(track):
+    if track not in WORKFLOWS:
+        abort(404)
+    accounts = g.user.visible_accounts().all()
+    return render_template("track.html", track=track, track_name=WORKFLOWS[track], rows=track_projects(track, accounts),
+                           startable=[a for a in accounts if g.user.can_manage(a)])
+
+
+@bp.route("/tracks/<track>/new")
+@login_required
+def start_track(track):
+    """On to the new-project form of the chosen account, with the track selected."""
+    if track not in WORKFLOWS or not request.args.get("account"):
+        abort(404)
+    return redirect(url_for("projects.new_project", code=request.args["account"], track=track))
 
 
 @bp.route("/accounts/<code>")

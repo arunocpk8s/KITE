@@ -1,0 +1,46 @@
+WEBVTT
+
+00:00:01.000 --> 00:00:06.000
+<v Maria Lopez>Welcome everyone, this is the accounts payable KT for the fictional Northwind account.</v>
+
+00:00:07.000 --> 00:00:12.000
+<v Maria Lopez>Vendor invoice posting and the weekly payment run are in scope for your team.</v>
+
+00:00:13.000 --> 00:00:18.000
+<v Maria Lopez>Tax filing is out of scope and stays with the client.</v>
+
+00:00:19.000 --> 00:00:24.000
+<v Dev Shah>What is the SLA for invoice queries?</v>
+
+00:00:25.000 --> 00:00:30.000
+<v Maria Lopez>Priority one invoice queries get a response within 4 hours.</v>
+
+00:00:31.000 --> 00:00:36.000
+<v Maria Lopez>The AP lead is accountable for the payment run, and your team is responsible for the proposal.</v>
+
+00:00:37.000 --> 00:00:42.000
+<v Maria Lopez>The process for the weekly payment run is as follows.</v>
+
+00:00:43.000 --> 00:00:47.000
+<v Maria Lopez>First, export the open invoices from the AP queue.</v>
+
+00:00:48.000 --> 00:00:52.000
+<v Maria Lopez>Then, run the payment proposal in F110 and check for blocked items.</v>
+
+00:00:53.000 --> 00:00:57.000
+<v Maria Lopez>Next, send the proposal to the AP lead for approval.</v>
+
+00:00:58.000 --> 00:01:02.000
+<v Maria Lopez>Finally, release the run and file the bank confirmation.</v>
+
+00:01:03.000 --> 00:01:08.000
+<v Maria Lopez>There is a known issue where F110 reports no valid payment method; the fix is to check the vendor master.</v>
+
+00:01:09.000 --> 00:01:14.000
+<v Maria Lopez>For escalations, contact Omar Haddad (omar.haddad@northwind.example), the finance manager.</v>
+
+00:01:15.000 --> 00:01:20.000
+<v Dev Shah>Please give Lena Fischer (lena.fischer@example.com) SSO access, she joins the team next week.</v>
+
+00:01:21.000 --> 00:01:25.000
+<v Maria Lopez>We still need to confirm the cut-off time for the Friday run.</v>

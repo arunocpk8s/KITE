@@ -22,6 +22,23 @@ daily reminder emails, documentation and deployment set-up (phase 7).
 KITE was started from a copy of FAXORA but shares nothing with it: separate folder, git
 repository, settings, secrets and databases.
 
+## Project tracks and meeting transcripts
+
+Each project follows one of two tracks, both shown on the home page and chosen when the project is added: **New
+Client Transaction KT** (KT from the client) or **Existing Project KT** (KT from the current team, ending with new
+people onboarded to the team). The track sets the checklist and the phases: KT, recordings, documents, runbooks, SOPs, RACI, client sign-off, shadow and reverse shadow.
+
+On a project page, **Add a transcript** takes a Teams or Zoom transcript (.vtt, .docx, .txt) or pasted text. KITE
+proposes scope of work, RACI, contacts, SOPs, runbooks, KB articles, open questions, sign-ins and meeting notes.
+A KT lead corrects them and creates the selected ones in one click; SOPs and KB articles are created as drafts.
+Sign-ins are never preselected and only an admin can create them.
+
+| Setting | Effect |
+|---|---|
+| Client account page: "may be sent to the Claude API", with `ANTHROPIC_API_KEY` | Claude reads the transcript (it is sent to Anthropic). Otherwise KITE's own rules do, and nothing leaves KITE, but they only find plainly stated items. |
+| `SHAREPOINT_ENABLED=true` | Documents go to the project's KT folder through Microsoft Graph, using the `AZURE_*` app registration, which needs an application permission with admin consent. Otherwise they are downloaded from KITE. |
+| Admin console, ServiceNow | Where KB drafts go. |
+
 ## Roles and client accounts
 
 | Role | Can do |

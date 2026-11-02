@@ -156,6 +156,11 @@ class Config:
     LOCAL_LOGIN_ENABLED = _bool("LOCAL_LOGIN_ENABLED", default=True)
     BREAK_GLASS_USERS = _csv("BREAK_GLASS_USERS")
 
+    # Meeting transcripts: the Claude API key (each account must also allow it) and uploading the documents
+    # to SharePoint through Microsoft Graph with the sign-in app registration (needs application permission).
+    ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+    SHAREPOINT_ENABLED = _bool("SHAREPOINT_ENABLED")
+
     # Shared secret for /tasks/daily-reminders (Vercel Cron sends it as "Authorization: Bearer ...").
     # Empty = the URL is switched off; use the daily-reminders CLI command instead.
     CRON_SECRET = os.environ.get("CRON_SECRET", "").strip()

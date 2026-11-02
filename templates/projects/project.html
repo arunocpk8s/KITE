@@ -3,14 +3,15 @@
 {% block content %}
 <p><a href="{{ url_for('main.account_detail', code=account.code) }}">&larr; {{ account.name }}</a></p>
 <h1>{{ project.name }} <span class="stage stage-{{ state.stage }}">{{ state.stage_label }}</span></h1>
+<p class="muted">Track: {{ project.workflow_label }}{% if project.is_internal %} · <a href="{{ url_for('onboarding.index', code=account.code) }}">Onboard the new team members</a>{% endif %}</p>
 {% if project.description %}<p class="description">{{ project.description }}</p>{% endif %}
 
 <ol class="steps">
   {% set steps = [
-    ("KT from the client", state.kt_done, state.signed_off ~ "/" ~ state.topics ~ " topics signed off"),
+    ("Internal KT from the current team" if project.is_internal else "KT from the client", state.kt_done, state.signed_off ~ "/" ~ state.topics ~ " topics signed off"),
     ("Hand-over checklist", state.checklist_done == state.checklist_total, state.checklist_done ~ "/" ~ state.checklist_total ~ " complete"),
     ("Client sign-off", project.client_signed, (project.client_signed_at | ist) if project.client_signed else "Not yet"),
-    ("Internal KT", project.client_signed and state.team_done == state.team_total, (state.team_done ~ "/" ~ state.team_total ~ " team members") if state.team_total else "No team set"),
+    ("Onboarded to the team" if project.is_internal else "Internal KT", project.client_signed and state.team_done == state.team_total, (state.team_done ~ "/" ~ state.team_total ~ " team members") if state.team_total else "No team set"),
   ] %}
   {% for title, done, detail in steps %}
   <li class="{{ 'step-done' if done else '' }}"><strong>{{ loop.index }}. {{ title }}</strong><br><span class="muted">{{ detail }}</span></li>
@@ -318,6 +319,17 @@
     {% endif %}
   </section>
 
+  <section class="card" id="meetings">
+    <h2>Meeting transcripts</h2>
+    {% for t in project.transcripts %}
+    <p><a href="{{ url_for('meetings.review', code=account.code, project_id=project.id, transcript_id=t.id) }}">{{ t.title }}</a>
+      <span class="muted">· {{ t.created_count }}/{{ t.items | length }} created</span></p>
+    {% else %}
+    <p class="muted">No transcripts yet. KITE turns a meeting transcript into scope of work, RACI, SOPs, runbooks, KB articles, access and open questions.</p>
+    {% endfor %}
+    {% if can_manage %}<p><a class="button button-secondary" href="{{ url_for('meetings.new', code=account.code, project_id=project.id) }}">Add a transcript</a></p>{% endif %}
+  </section>
+
   <section class="card">
     <h2>History</h2>
     <ul class="history">
@@ -335,6 +347,8 @@
           "PHASE_PLANNED": "planned a transition phase", "PHASE_STARTED": "started a transition phase",
           "PHASE_SIGNED_OFF": "signed off a transition phase", "PHASE_REOPENED": "reopened a transition phase",
           "CRITERION_ADDED": "added an exit criterion", "CRITERION_MET": "met an exit criterion",
+          "TRANSCRIPT_ADDED": "added a meeting transcript", "TRANSCRIPT_REMOVED": "removed a meeting transcript",
+          "TRANSCRIPT_APPLIED": "created items from a meeting transcript",
           "CRITERION_REOPENED": "reopened an exit criterion", "CRITERION_REMOVED": "removed an exit criterion",
         } %}
         {{ labels.get(e.event_type, "updated the project") }}

@@ -259,6 +259,7 @@ def _read_account_form(form):
         "code": form.get("code", "").strip().upper(),
         "name": " ".join(form.get("name", "").split()),
         "description": form.get("description", "").strip(),
+        "ai_transcripts": form.get("ai_transcripts") == "1",
     }
 
 
@@ -294,12 +295,13 @@ def accounts():
 @bp.route("/accounts/new", methods=["GET", "POST"])
 def new_account():
     if request.method == "GET":
-        return _render_account_form(None, {"code": "", "name": "", "description": ""}, {})
+        return _render_account_form(None, {"code": "", "name": "", "description": "", "ai_transcripts": False}, {})
     data = _read_account_form(request.form)
     errors = _validate_account(data)
     if errors:
         return _render_account_form(None, data, errors, 400)
-    account = Account(code=data["code"], name=data["name"], description=data["description"], active=True)
+    account = Account(code=data["code"], name=data["name"], description=data["description"], active=True,
+                      ai_transcripts=data["ai_transcripts"])
     db.session.add(account)
     add_admin_event(g.user, "ACCOUNT_CREATED", account.code, account.name)
     db.session.commit()
@@ -312,16 +314,18 @@ def edit_account(account_id):
     account = db.get_or_404(Account, account_id)
     if request.method == "GET":
         return _render_account_form(account, {"code": account.code, "name": account.name,
-                                              "description": account.description}, {})
+                                              "description": account.description,
+                                              "ai_transcripts": account.ai_transcripts}, {})
     data = _read_account_form(request.form)
     data["code"] = account.code
     errors = _validate_account(data, account)
     if errors:
         return _render_account_form(account, data, errors, 400)
     changes = [f"{f}: {getattr(account, f) or '(none)'} -> {data[f] or '(none)'}"
-               for f in ("name", "description") if getattr(account, f) != data[f]]
+               for f in ("name", "description", "ai_transcripts") if getattr(account, f) != data[f]]
     if changes:
         account.name, account.description = data["name"], data["description"]
+        account.ai_transcripts = data["ai_transcripts"]
         add_admin_event(g.user, "ACCOUNT_UPDATED", account.code, "; ".join(changes))
         db.session.commit()
         flash(f"Account {account.code} updated.", "success")

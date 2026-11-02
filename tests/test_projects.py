@@ -198,7 +198,7 @@ def test_client_approver_signs_off_in_kite_then_internal_kt(app, client, sent):
     assert client.post(f"{BASE}/{pid}/sign-off").status_code == 403
     client.get("/logout")
     login(client, "viewer")  # the approver's email matches this viewer
-    assert b"I sign off the KT for this project" in client.get(f"{BASE}/{pid}").data
+    assert b"I sign off the KT for this project" in client.get(f"{BASE}/{pid}/transition").data
     client.post(f"{BASE}/{pid}/sign-off", data={"comment": "Thanks team"})
     with app.app_context():
         p = project(app, pid)

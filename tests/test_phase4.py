@@ -134,9 +134,6 @@ def test_draft_delete(app, client):
 def test_doubt_goes_to_the_topic_sme_and_back(app, client, sent):
     mid = make_module(app)
     tid = make_topic(app, mid, sme="sme", receivers=("mem1",))
-    login(client, "viewer")
-    assert client.post(f"{A}/doubts/new", data={"title": "x"}).status_code == 403
-    client.get("/logout")
     login(client, "mem1")
     assert client.get(f"{A}/doubts/new?topic_id={tid}").status_code == 200
     client.post(f"{A}/doubts/new", data={"title": "Which GL for credit notes?", "detail": "Tried 4000",

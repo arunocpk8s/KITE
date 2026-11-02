@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}{{ item.code if item else "Add backlog item" }} · {{ account.code }} · {{ app_name }}{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('backlog.board', code=account.code) }}">&larr; Backlog · {{ account.name }}</a></p>
+<section class="card narrow-form">
+  <h2>{{ "Edit " ~ item.code if item else "Add a backlog item" }}</h2>
+  <form method="post" action="{{ url_for('backlog.edit', code=account.code, item_id=item.id) if item else url_for('backlog.new', code=account.code) }}" novalidate>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label for="title">What needs doing</label>
+    <input id="title" name="title" value="{{ form.title }}" maxlength="200" required autofocus>
+    {% if errors.title %}<p class="error">{{ errors.title }}</p>{% endif %}
+    <div class="row">
+      <div><label for="item_type">Type</label>
+        <select id="item_type" name="item_type">{% for k, v in types.items() %}<option value="{{ k }}" {% if form.item_type == k %}selected{% endif %}>{{ v }}</option>{% endfor %}</select>
+        {% if errors.item_type %}<p class="error">{{ errors.item_type }}</p>{% endif %}</div>
+      <div><label for="priority">Priority</label>
+        <select id="priority" name="priority">{% for k, v in priorities.items() %}<option value="{{ k }}" {% if form.priority == k %}selected{% endif %}>{{ v }}</option>{% endfor %}</select>
+        {% if errors.priority %}<p class="error">{{ errors.priority }}</p>{% endif %}</div>
+    </div>
+    <div class="row">
+      <div><label for="owner_id">Owner</label>
+        <select id="owner_id" name="owner_id"><option value="">Not assigned yet</option>{% for u in owners %}<option value="{{ u.id }}" {% if form.owner_id == u.id|string %}selected{% endif %}>{{ u.full_name }}</option>{% endfor %}</select>
+        {% if errors.owner_id %}<p class="error">{{ errors.owner_id }}</p>{% endif %}</div>
+      <div><label for="target_date">Target date</label>
+        <input id="target_date" name="target_date" type="date" value="{{ form.target_date }}">
+        {% if errors.target_date %}<p class="error">{{ errors.target_date }}</p>{% endif %}</div>
+    </div>
+    <label for="project_id">Project (optional)</label>
+    <select id="project_id" name="project_id"><option value="">—</option>{% for p in projects %}<option value="{{ p.id }}" {% if form.project_id == p.id|string %}selected{% endif %}>{{ p.name }}</option>{% endfor %}</select>
+    {% if errors.project_id %}<p class="error">{{ errors.project_id }}</p>{% endif %}
+    <label for="detail">Detail (optional)</label>
+    <textarea id="detail" name="detail" rows="4" maxlength="8000">{{ form.detail }}</textarea>
+    {% if errors.detail %}<p class="error">{{ errors.detail }}</p>{% endif %}
+    <button type="submit">{{ "Save" if item else "Add to the backlog" }}</button>
+    <a href="{{ url_for('backlog.board', code=account.code) }}">Cancel</a>
+  </form>
+</section>
+{% if item and (g.user.can_manage(account) or item.created_by_id == g.user.id) %}
+<section class="card narrow-form">
+  <form method="post" action="{{ url_for('backlog.delete', code=account.code, item_id=item.id) }}" data-confirm="Delete {{ item.code }}?">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="danger">Delete this item</button>
+  </form>
+</section>
+{% endif %}
+{% endblock %}

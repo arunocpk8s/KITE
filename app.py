@@ -13,6 +13,8 @@ from sqlalchemy.exc import DBAPIError
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 import activity
+import attachments
+import backlog
 import notify
 from admin import bp as admin_bp
 import sops
@@ -95,6 +97,9 @@ def create_app(test_config=None):
     app.register_blueprint(knowledge_bp)
     app.register_blueprint(servicenow.bp)
     app.register_blueprint(meetings.bp)
+    app.register_blueprint(meetings.from_bp)
+    app.register_blueprint(attachments.bp)
+    app.register_blueprint(backlog.bp)
     app.register_blueprint(documents.bp)
     app.register_blueprint(tasks.bp)
     csrf.exempt(tasks.bp)  # called by a scheduler with a bearer secret, not a browser form

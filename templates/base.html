@@ -39,8 +39,9 @@
     <a class="workspace-name {{ 'active' if request.endpoint == 'main.account_detail' }}" href="{{ url_for('main.account_detail', code=nav_account.code) }}" title="{{ nav_account.name }}">
       <span class="home-org-mark" aria-hidden="true">{{ nav_account.name[:1] | upper }}</span><span>{{ nav_account.name }}</span>
     </a>
+    <a class="button panel-button" href="{{ url_for('doubts.new_question', code=nav_account.code) }}">Raise a doubt</a>
     <nav aria-label="{{ nav_account.name }}">
-      {% for label, endpoint in (("KT plan", "kt.plan"), ("Documents", "documents.workspace"), ("SOPs", "sops.sop_list"), ("Scope of work", "sops.scope"), ("Transactions", "transactions.catalogue"), ("Change log", "transactions.change_log"), ("Doubts", "doubts.doubt_list"), ("Onboarding", "onboarding.index"), ("Glossary", "knowledge.glossary"), ("Search", "knowledge.search")) %}
+      {% for label, endpoint in (("KT plan", "kt.plan"), ("Documents", "documents.workspace"), ("SOPs", "sops.sop_list"), ("Scope of work", "sops.scope"), ("Transactions", "transactions.catalogue"), ("Change log", "transactions.change_log"), ("Backlog", "backlog.board"), ("Doubts", "doubts.doubt_list"), ("Onboarding", "onboarding.index"), ("Glossary", "knowledge.glossary"), ("Search", "knowledge.search")) %}
       <a class="side-link {{ 'active' if request.endpoint == endpoint }}" href="{{ url_for(endpoint, code=nav_account.code) }}">{{ label }}</a>
       {% endfor %}
     </nav>

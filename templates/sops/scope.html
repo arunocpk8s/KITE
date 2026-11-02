@@ -2,7 +2,10 @@
 {% block title %}Scope of work · {{ account.code }} · {{ app_name }}{% endblock %}
 {% block content %}
 <p><a href="{{ url_for('main.account_detail', code=account.code) }}">&larr; {{ account.name }}</a></p>
-<h1>Scope of work <span class="muted">· {{ account.name }} ({{ account.code }})</span></h1>
+<div class="page-head">
+  <h1>Scope of work <span class="muted">· {{ account.name }} ({{ account.code }})</span></h1>
+  {% if can_manage %}<a class="button button-secondary" href="{{ url_for('meetings_from.from_recording', code=account.code, focus='scope') }}">Create from a recording's transcript</a>{% endif %}
+</div>
 
 <section class="card">
   <h2>Contract</h2>

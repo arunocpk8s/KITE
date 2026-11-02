@@ -1,0 +1,47 @@
+{# Files of a KT plan (project), or of one topic when topic is given. #}
+{% set files = topic.attachments if topic else project.attachments %}
+<section class="card files-card">
+  <h3>Files and workflow images</h3>
+  {% if files %}
+  <div class="file-grid">
+    {% for f in files %}
+    <div class="file-tile">
+      {% if f.is_image %}
+      <a class="file-picture" href="{{ url_for('attachments.view', code=account.code, file_id=f.id) }}" target="_blank" rel="noopener noreferrer"><img src="{{ url_for('attachments.view', code=account.code, file_id=f.id) }}" alt="{{ f.filename }}" loading="lazy"></a>
+      {% else %}
+      <a class="file-picture file-doc" href="{{ url_for('attachments.view', code=account.code, file_id=f.id) }}">{{ f.extension | upper }}</a>
+      {% endif %}
+      <a class="file-name" href="{{ url_for('attachments.view', code=account.code, file_id=f.id) }}" {% if f.is_image %}target="_blank" rel="noopener noreferrer"{% endif %}>{{ f.filename }}</a>
+      <span class="muted">{{ f.size_label }}{% if f.topic and not topic %} · {{ f.topic.title }}{% endif %}</span>
+      {% if g.user.can_manage(account) or (f.uploaded_by_id == g.user.id and g.user.can_contribute(account)) %}
+      <form method="post" action="{{ url_for('attachments.delete', code=account.code, file_id=f.id) }}" data-confirm="Remove '{{ f.filename }}'?">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="link-button">Remove</button>
+      </form>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="muted">No files yet.</p>
+  {% endif %}
+  {% if g.user.can_contribute(account) %}
+  <form class="file-form" method="post" enctype="multipart/form-data" action="{{ url_for('attachments.upload', code=account.code) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="project_id" value="{{ project.id }}">
+    {% if topic %}<input type="hidden" name="topic_id" value="{{ topic.id }}">{% endif %}
+    <label>Add a file <span class="muted">(Word, PDF, Visio, JPG or PNG, up to 4 MB)</span>
+      <input type="file" name="file" accept=".docx,.doc,.pdf,.vsdx,.jpg,.jpeg,.png" required></label>
+    <button type="submit" class="small">Upload</button>
+  </form>
+  {% endif %}
+  {% if not topic and g.user.can_manage(account) and not project.client_signed %}
+  <form class="file-form" method="post" enctype="multipart/form-data" action="{{ url_for('attachments.import_word', code=account.code) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="project_id" value="{{ project.id }}">
+    <label>Create KT topics from a Word file <span class="muted">(.docx; you check them first)</span>
+      <input type="file" name="file" accept=".docx" required></label>
+    <button type="submit" class="small">Read the file</button>
+  </form>
+  {% endif %}
+</section>

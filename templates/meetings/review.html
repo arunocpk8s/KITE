@@ -4,7 +4,19 @@
 <p><a href="{{ url_for('projects.project', code=account.code, project_id=project.id) }}#meetings">&larr; {{ project.name }}</a></p>
 <h1>{{ transcript.title }}</h1>
 <p class="muted">{% if transcript.meeting_date %}{{ transcript.meeting_date | date }} · {% endif %}Read with {{ transcript.method_label }} · added by {{ transcript.uploaded_by.full_name }}
-  {% if transcript.recording_link %} · <a href="{{ transcript.recording_link }}" target="_blank" rel="noopener noreferrer">Recording</a>{% endif %}</p>
+</p>
+<p>{% if transcript.recording_link %}<a class="button" href="{{ transcript.recording_link }}" target="_blank" rel="noopener noreferrer">Open the recording</a>{% endif %}
+  <a class="button button-secondary" href="{{ url_for('meetings.transcript_view', code=account.code, project_id=project.id, transcript_id=transcript.id) }}">View the transcript</a></p>
+{% if can_manage %}
+<details class="recording-edit">
+  <summary>{{ "Change the recording link" if transcript.recording_link else "Add the recording link" }}</summary>
+  <form class="inline-form wide" method="post" action="{{ url_for('meetings.set_recording', code=account.code, project_id=project.id, transcript_id=transcript.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input name="recording_link" value="{{ transcript.recording_link }}" maxlength="500" placeholder="https://...sharepoint.com/..." aria-label="Recording link">
+    <button type="submit" class="small">Save</button>
+  </form>
+</details>
+{% endif %}
 
 <section class="card">
   <h2>Where these go</h2>
@@ -14,8 +26,9 @@
   </ul>
 </section>
 
-{% set open_items = transcript.items | rejectattr('created_at') | list %}
-{% set done_items = transcript.items | selectattr('created_at') | list %}
+{% set shown = (transcript.items | selectattr('kind', 'in', kinds) | list) if kinds else transcript.items %}
+{% set open_items = shown | rejectattr('created_at') | list %}
+{% set done_items = shown | selectattr('created_at') | list %}
 
 {% if open_items %}
 <section class="card">
@@ -33,7 +46,7 @@
       <label for="title-{{ item.id }}">Title</label>
       <input id="title-{{ item.id }}" name="title-{{ item.id }}" value="{{ item.title }}" maxlength="300">
       <label for="detail-{{ item.id }}">Detail</label>
-      <textarea id="detail-{{ item.id }}" name="detail-{{ item.id }}" rows="{{ 6 if item.detail | length > 200 else 2 }}">{{ item.detail }}</textarea>
+      <textarea id="detail-{{ item.id }}" name="detail-{{ item.id }}" rows="{{ [[item.detail.count('\n') + 2, 2] | max, 14] | min }}">{{ item.detail }}</textarea>
     </fieldset>
     {% endfor %}
     <button type="submit">Create the selected items</button>

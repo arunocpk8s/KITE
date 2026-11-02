@@ -1,38 +1,41 @@
 {% extends "base.html" %}
-{% block title %}{{ "Edit module" if module else "Add module" }} · {{ account.code }} · {{ app_name }}{% endblock %}
+{% block title %}{{ "Edit" if module else "Add technology or process" }} · {{ account.code }} · {{ app_name }}{% endblock %}
 {% block content %}
 <p><a href="{{ url_for('kt.plan', code=account.code) }}">&larr; KT plan · {{ account.name }}</a></p>
 
 <section class="card narrow-form">
-  <h2>{{ "Edit module" if module else "Add a module" }}</h2>
+  <h2>{{ "Edit technology or process" if module else "Add a technology or process" }}</h2>
   <form method="post" action="{{ url_for('kt.edit_module', code=account.code, module_id=module.id) if module else url_for('kt.new_module', code=account.code) }}" novalidate>
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <label for="project_id">Project</label>
+    <label for="project_id">KT plan</label>
     <select id="project_id" name="project_id" required>
       <option value="">Choose…</option>
       {% for p in projects %}<option value="{{ p.id }}" {% if form.project_id == p.id|string %}selected{% endif %}>{{ p.name }}{% if p.client_signed %} (client signed off){% endif %}</option>{% endfor %}
     </select>
     {% if errors.project_id %}<p class="error">{{ errors.project_id }}</p>{% endif %}
-    <label for="title">Module title</label>
-    <input id="title" name="title" value="{{ form.title }}" maxlength="200" placeholder="e.g. Billing and invoicing" required autofocus>
+    <label for="kind">Type</label>
+    <select id="kind" name="kind">{% for key, label in kinds.items() %}<option value="{{ key }}" {% if form.kind == key %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+    {% if errors.kind %}<p class="error">{{ errors.kind }}</p>{% endif %}
+    <label for="title">Name</label>
+    <input id="title" name="title" value="{{ form.title }}" maxlength="200" placeholder="e.g. Kubernetes, or Incident management" required autofocus>
     {% if errors.title %}<p class="error">{{ errors.title }}</p>{% endif %}
     <label for="description">Description (optional)</label>
     <textarea id="description" name="description" rows="4" maxlength="4000">{{ form.description }}</textarea>
     {% if errors.description %}<p class="error">{{ errors.description }}</p>{% endif %}
-    <button type="submit">{{ "Save module" if module else "Add module" }}</button>
+    <button type="submit">{{ "Save" if module else "Add" }}</button>
     <a href="{{ url_for('kt.plan', code=account.code) }}">Cancel</a>
   </form>
 </section>
 
 {% if module %}
 <section class="card narrow-form">
-  <h2>Delete module</h2>
+  <h2>Delete</h2>
   {% if module.topics %}
-  <p class="muted">This module has {{ module.topics | length }} topic(s), so it cannot be deleted. Cancel topics you no longer need instead.</p>
+  <p class="muted">This has {{ module.topics | length }} topic(s), so it cannot be deleted. Cancel topics you no longer need instead.</p>
   {% else %}
-  <form method="post" action="{{ url_for('kt.delete_module', code=account.code, module_id=module.id) }}" data-confirm="Delete the empty module '{{ module.title }}'?">
+  <form method="post" action="{{ url_for('kt.delete_module', code=account.code, module_id=module.id) }}" data-confirm="Delete '{{ module.title }}'? It has no topics.">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <button type="submit" class="danger">Delete this empty module</button>
+    <button type="submit" class="danger">Delete</button>
   </form>
   {% endif %}
 </section>

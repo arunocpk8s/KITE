@@ -11,7 +11,7 @@
   <section class="card">
     <dl class="details">
       <dt>Project</dt><dd>{{ topic.module.project.name }}</dd>
-      <dt>Module</dt><dd>{{ topic.module.title }}</dd>
+      <dt>{{ topic.module.kind_label }}</dt><dd>{{ topic.module.title }}</dd>
       <dt>SME</dt><dd>{{ topic.sme.full_name if topic.sme else "Not assigned yet" }}</dd>
       <dt>Receivers</dt><dd>{{ topic.receiver_users | map(attribute='full_name') | join(', ') or "None yet" }}</dd>
       <dt>Planned</dt><dd>{{ topic.planned_date | date or "—" }}</dd>
@@ -26,9 +26,11 @@
     </ul>
     {% endif %}
     <p>{% if can_run %}<a href="{{ url_for('kt.edit_topic', code=account.code, topic_id=topic.id) }}">Edit topic</a> · {% endif %}
-      {% if g.user.can_contribute(account) %}<a href="{{ url_for('doubts.new_question', code=account.code, topic_id=topic.id) }}">Raise a doubt about this topic</a> · {% endif %}
+      <a href="{{ url_for('doubts.new_question', code=account.code, topic_id=topic.id) }}">Raise a doubt about this topic</a> ·
       <a href="{{ url_for('doubts.doubt_list', code=account.code, show='all') }}">See doubts</a></p>
   </section>
+
+  {% with project=topic.module.project %}{% include "kt/_files.html" %}{% endwith %}
 
   <section class="card" id="sessions">
     <h2>Sessions</h2>

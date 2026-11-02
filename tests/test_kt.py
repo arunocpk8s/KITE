@@ -108,7 +108,7 @@ def test_topic_of_another_account_is_404(app, client):
 
 def test_empty_plan_guides_the_kt_lead(client):
     login(client, "lead")
-    assert b"Add the first project" in client.get(BASE).data
+    assert b"Add KT plan" in client.get(BASE).data
     client.get("/logout")
     login(client, "mem1")
     page = client.get(BASE).data
@@ -146,7 +146,7 @@ def test_kt_lead_of_another_account_cannot_plan_here(app, client):
 
 def test_create_module_and_topic(app, client, sent):
     login(client, "lead")
-    assert client.get(f"{BASE}/topics/new").status_code == 302  # no module yet: sent to add one
+    assert b"New KT plan name" in client.get(f"{BASE}/topics/new").data  # nothing yet: the form starts a plan too
     assert "/projects/new" in client.get(f"{BASE}/modules/new").headers["Location"]  # no project yet either
     pid = make_project(app)
     client.post(f"{BASE}/modules/new", data={"title": "  Month   end ", "description": "Closing the books",
@@ -173,7 +173,7 @@ def test_topic_validation(app, client):
     login(client, "lead")
     cases = [
         ({"title": ""}, b"Enter a topic title"),
-        ({"module_id": str(other)}, b"Choose a module"),
+        ({"module_id": str(other)}, b"Choose a technology or process"),
         ({"sme_id": str(_uid(app, "mem2"))}, b"active member of this account"),
         ({"receivers": [str(_uid(app, "mem2"))]}, b"Receivers must be active members"),
         ({"planned_date": "2026-13-01"}, b"valid date"),
@@ -393,7 +393,7 @@ def test_export_csv(app, client):
     resp = client.get(f"{BASE}/export.csv")
     assert resp.status_code == 200 and resp.mimetype == "text/csv"
     text = resp.data.decode("utf-8-sig")
-    assert text.splitlines()[0].startswith("Project,Module,Topic,Status,SME")
+    assert text.splitlines()[0].startswith("Project,Type,Technology or process,Topic,Status,SME")
     assert '"Credit notes, part 1"' in text and "20 Nov 2026" in text
 
 

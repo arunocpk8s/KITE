@@ -43,7 +43,7 @@ def next_steps(user, today=None):
               .filter(ProjectTeamMember.user_id == user.id, ProjectTeamMember.completed_at.is_(None),
                       KTProject.account_id.in_(ids)).all()):
         p = m.project
-        link = url_for("projects.project", code=p.account.code, project_id=p.id) + "#internal"
+        link = url_for("transitions.view", code=p.account.code, project_id=p.id) + "#internal"
         if any(s.held for s in p.internal_sessions):
             steps.append(_step(f"Confirm you completed internal KT for '{p.name}'", link, p.account))
         elif not p.internal_sessions:
@@ -124,7 +124,7 @@ def next_steps(user, today=None):
         for p in KTProject.query.filter_by(account_id=account.id).all():
             if project_state(p)["ready"]:
                 steps.append(_step(f"Get the client's sign-off for '{p.name}'",
-                                   url_for("projects.project", code=account.code, project_id=p.id) + "#sign-off",
+                                   url_for("transitions.view", code=account.code, project_id=p.id) + "#sign-off",
                                    account))
             phase = current_phase(p) if p.phases else None
             link = url_for("transitions.view", code=account.code, project_id=p.id)
@@ -142,7 +142,7 @@ def next_steps(user, today=None):
     for p in KTProject.query.filter(KTProject.account_id.in_(ids), KTProject.client_signed_at.is_(None)).all():
         if p.is_client_approver(user) and project_state(p)["ready"]:
             steps.append(_step(f"Sign off the KT for '{p.name}'",
-                               url_for("projects.project", code=p.account.code, project_id=p.id) + "#sign-off",
+                               url_for("transitions.view", code=p.account.code, project_id=p.id) + "#sign-off",
                                p.account, urgent=True))
 
     steps.sort(key=lambda s: not s["urgent"])

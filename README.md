@@ -29,6 +29,16 @@ console. Inside a workspace (client account) a panel lists its sections. The hom
 you can see, the two tracks, quick actions, a template gallery, insights and recent activity (`activity.py`). A new project can start with the standard IT KT modules (application,
 architecture, infrastructure, deployment, monitoring, security, support).
 
+## KT plan
+
+Add KT plan is one short form: the plan, Technology or Process, its name, the KT topic, the SME, a target date and a
+status. The plan page groups topics by technology and process, and shows or changes each topic's status. Word, PDF,
+Visio, JPG and PNG files up to 4 MB can be added to a plan or topic (`attachments.py`; stored in the database), and KT
+topics can be read from a Word file, checked before they are added. Client sign-off and internal KT are on the
+transition plan page. The SOP and scope of work pages can propose items from a meeting's transcript, read by Claude
+where the account allows it. The Backlog (`backlog.py`) sits beside the change log. Everyone in an account, viewers
+included, can raise a doubt.
+
 ## KT documents
 
 Each client account has a **Documents** workspace: folders, search, and documents started from templates (KT plan,

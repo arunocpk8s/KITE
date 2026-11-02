@@ -16,6 +16,9 @@
   {% endfor %}
 </ol>
 
+{% include "projects/_sign_off.html" %}
+{% include "projects/_internal.html" %}
+
 {% for p in project.phases %}
 <section class="card phase-card {{ 'phase-card-current' if current and p.id == current.id }}" id="phase-{{ p.id }}">
   <div class="module-head">
@@ -34,7 +37,7 @@
   <ul class="plain-list">
     {% if p.phase == "KT" %}
     <li>{% if project.client_signed %}<span class="tick">&#10003;</span> <strong>Client signed off the project's KT</strong> <span class="muted">{{ project.client_signed_at | ist }}</span>
-      {% else %}<span class="pending">&#9675;</span> Client signs off the project's KT <span class="muted">(automatic: <a href="{{ url_for('projects.project', code=account.code, project_id=project.id) }}#sign-off">project sign-off</a>)</span>{% endif %}</li>
+      {% else %}<span class="pending">&#9675;</span> Client signs off the project's KT <span class="muted">(automatic: <a href="#sign-off">client sign-off</a>)</span>{% endif %}</li>
     {% endif %}
     {% for c in p.criteria %}
     <li>

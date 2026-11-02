@@ -65,14 +65,13 @@ def doubt_list(code):
         query = query.filter(Question.status != "RESOLVED", Question.assigned_to_id.is_(None))
     questions = query.order_by(Question.blocking.desc(), Question.status, Question.updated_at.desc()).all()
     return render_template("doubts/list.html", account=account, questions=questions, show=show,
-                           can_ask=g.user.can_contribute(account), labels=QUESTION_STATUSES)
+                           can_ask=True, labels=QUESTION_STATUSES)
 
 
 @bp.route("/new", methods=["GET", "POST"])
 @login_required
 def new_question(code):
-    account = visible_account_or_404(code)
-    _require(g.user.can_contribute(account))
+    account = visible_account_or_404(code)  # any member, viewers included, may ask
     projects = KTProject.query.filter_by(account_id=account.id).order_by(KTProject.position, KTProject.id).all()
     topics = KTTopic.query.filter_by(account_id=account.id).order_by(KTTopic.title).all()
     transactions = Transaction.query.filter_by(account_id=account.id, active=True).order_by(Transaction.code).all()
@@ -132,7 +131,7 @@ def question(code, question_id):
     question = _question_or_404(account, question_id)
     manager = g.user.can_manage(account)
     return render_template(
-        "doubts/question.html", account=account, question=question, can_reply=g.user.can_contribute(account),
+        "doubts/question.html", account=account, question=question, can_reply=g.user.can_contribute(account) or question.asked_by_id == g.user.id,
         can_resolve=question.asked_by_id == g.user.id or manager,
         can_assign=manager or question.assigned_to_id == g.user.id, answerers=_answerers(account),
         kb_conn=servicenow.connection_for(account), can_publish=servicenow.can_publish(g.user, account),
@@ -143,8 +142,8 @@ def question(code, question_id):
 @login_required
 def reply(code, question_id):
     account = visible_account_or_404(code)
-    _require(g.user.can_contribute(account))
     question = _question_or_404(account, question_id)
+    _require(g.user.can_contribute(account) or question.asked_by_id == g.user.id)
     body = request.form.get("body", "").strip()
     if not body or len(body) > 8000:
         flash("Write your reply (up to 8,000 characters).", "error")

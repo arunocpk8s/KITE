@@ -8,7 +8,7 @@ import servicenow
 from auth import login_required
 from kt import visible_account_or_404
 from models import (
-    GLOSSARY_KINDS, GlossaryEntry, KTDocument, KTProject, KTTopic, ProjectDocument, Question, Sop, SopVersion, Transaction, db,
+    BacklogItem, GLOSSARY_KINDS, GlossaryEntry, KTDocument, KTProject, KTTopic, ProjectDocument, Question, Sop, SopVersion, Transaction, db,
 )
 from sops import can_author
 from timeutil import utcnow
@@ -115,6 +115,7 @@ def search_groups(account, q):
     terms = GlossaryEntry.query.filter(GlossaryEntry.account_id == a, or_(
         match(GlossaryEntry.term), match(GlossaryEntry.meaning))).limit(MAX_RESULTS)
     doubts = Question.query.filter(Question.account_id == a, or_(match(Question.title), match(Question.detail))).limit(MAX_RESULTS)
+    backlog = BacklogItem.query.filter(BacklogItem.account_id == a, or_(match(BacklogItem.title), match(BacklogItem.detail))).limit(MAX_RESULTS)
     links = ProjectDocument.query.join(KTProject).filter(KTProject.account_id == a, match(ProjectDocument.title)).limit(MAX_RESULTS)
     # A document's body is HTML: match the words a reader sees, not its tags.
     written = [d for d in KTDocument.query.filter(KTDocument.account_id == a, or_(match(KTDocument.title), match(KTDocument.body)))
@@ -129,6 +130,7 @@ def search_groups(account, q):
                       for e in terms]),
         ("Doubts", [(f"{d.code} {d.title}", url_for("doubts.question", code=code, question_id=d.id),
                      d.status_label) for d in doubts]),
+        ("Backlog", [(f"{i.code} {i.title}", url_for("backlog.edit", code=code, item_id=i.id), i.priority_label) for i in backlog]),
         ("KT documents", [(d.title, d.url, d.doc_type) for d in links]),
     ]
 

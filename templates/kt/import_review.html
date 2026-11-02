@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}KT topics from Word · {{ account.code }} · {{ app_name }}{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('kt.plan', code=account.code) }}#project-{{ project.id }}">&larr; KT plan · {{ project.name }}</a></p>
+<h1>KT topics from {{ filename }}</h1>
+<p class="muted">Nothing is added yet. Correct the rows, untick what you do not want, then add them to {{ project.name }}.</p>
+<section class="card">
+  <form method="post" action="{{ url_for('attachments.import_create', code=account.code) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="project_id" value="{{ project.id }}">
+    <input type="hidden" name="rows" value="{{ rows | length }}">
+    <div class="table-wrap">
+    <table class="import-table">
+      <thead><tr><th>Add</th><th>Type</th><th>Technology or process</th><th>KT topic</th></tr></thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td><input type="checkbox" name="use-{{ loop.index0 }}" value="1" checked aria-label="Add row {{ loop.index }}"></td>
+          <td><select name="kind-{{ loop.index0 }}" aria-label="Type of row {{ loop.index }}">
+            {% set outer = loop %}{% for key, label in kinds.items() %}<option value="{{ key }}" {% if row.kind == key %}selected{% endif %}>{{ label }}</option>{% endfor %}
+          </select></td>
+          <td><input name="area-{{ loop.index0 }}" value="{{ row.area }}" maxlength="200" aria-label="Technology or process of row {{ loop.index }}"></td>
+          <td><input name="title-{{ loop.index0 }}" value="{{ row.title }}" maxlength="200" aria-label="KT topic of row {{ loop.index }}"></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    <button type="submit">Add the selected topics</button>
+  </form>
+</section>
+{% endblock %}

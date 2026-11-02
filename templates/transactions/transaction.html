@@ -38,7 +38,7 @@
       {% endfor %}
     </ul>
     {% else %}<p class="muted">No doubts raised about this transaction.</p>{% endif %}
-    {% if g.user.can_contribute(account) %}<p><a href="{{ url_for('doubts.new_question', code=account.code, transaction_id=txn.id) }}">Raise a doubt about {{ txn.code }}</a></p>{% endif %}
+    <p><a href="{{ url_for('doubts.new_question', code=account.code, transaction_id=txn.id) }}">Raise a doubt about {{ txn.code }}</a></p>
   </section>
 </div>
 <div>

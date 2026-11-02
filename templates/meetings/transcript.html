@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Transcript · {{ transcript.title }} · {{ app_name }}{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('meetings.review', code=account.code, project_id=project.id, transcript_id=transcript.id) }}">&larr; {{ transcript.title }}</a></p>
+<h1>{{ transcript.title }} <span class="muted">· transcript</span></h1>
+<p>{% if transcript.recording_link %}<a class="button" href="{{ transcript.recording_link }}" target="_blank" rel="noopener noreferrer">Open the recording</a>{% endif %}
+  <a class="button button-secondary" href="{{ url_for('meetings.transcript_view', code=account.code, project_id=project.id, transcript_id=transcript.id, download=1) }}">Download as text</a></p>
+<section class="card"><p class="description">{{ transcript.text }}</p></section>
+{% endblock %}

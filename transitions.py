@@ -14,6 +14,7 @@ from flask import Blueprint, abort, flash, g, redirect, render_template, request
 import notify
 from auth import login_required
 from kt import URL_RE, members_of, visible_account_or_404
+from projects import transition_context
 from models import (
     ExitCriterion, KTProject, TransitionPhase, add_project_event, db, ensure_phases,
 )
@@ -116,6 +117,7 @@ def view(code, project_id):
         can_tick=g.user.can_contribute(account), can_start=can_start, blockers=sign_off_blockers,
         reopenable=[p for p in project.phases if p.status == "SIGNED_OFF"
                     and (_next(p) is None or _next(p).status == "NOT_STARTED")],
+        **transition_context(account, project),
     )
 
 

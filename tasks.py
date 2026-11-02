@@ -60,7 +60,7 @@ def collect(today):
         p = s.project
         for u in set(p.team_users) | {s.presenter}:
             add(u, p.account_id, f"Internal KT session tomorrow {format_ist(s.starts_at)}: {p.name}",
-                f"/accounts/{p.account.code}/projects/{p.id}#internal")
+                f"/accounts/{p.account.code}/projects/{p.id}/transition#internal")
 
     for t in KTTopic.query.filter(KTTopic.status.notin_(("SIGNED_OFF", "CANCELLED", "ON_HOLD")),
                                   KTTopic.due_date.isnot(None), KTTopic.due_date < today):

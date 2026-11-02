@@ -104,7 +104,9 @@ def can_run_internal(user, account, project):
 
 
 def _back(project, anchor=""):
-    return redirect(url_for("projects.project", code=project.account.code, project_id=project.id) + anchor)
+    # Client sign-off and internal KT are on the transition page.
+    endpoint = "transitions.view" if anchor in ("#sign-off", "#internal") else "projects.project"
+    return redirect(url_for(endpoint, code=project.account.code, project_id=project.id) + anchor)
 
 
 def _link_ok(url):
@@ -115,14 +117,25 @@ def _leads(account):
     return [u.email for u in members_of(account) if u.role == "kt_lead"]
 
 
-def _project_body(project, intro):
+def _project_body(project, intro, endpoint="projects.project"):
     return (
         f"{intro}\n\n"
         f"Account: {project.account.code} - {project.account.name}\n"
         f"Project: {project.name}\n\n"
-        f"Open the project: {notify.app_url(url_for('projects.project', code=project.account.code, project_id=project.id))}"
+        f"Open the project: {notify.app_url(url_for(endpoint, code=project.account.code, project_id=project.id))}"
         + notify.footer()
     )
+
+
+def transition_context(account, project):
+    """What the client sign-off and internal KT parts of the transition page need."""
+    return {
+        "state": project_state(project), "can_manage": g.user.can_manage(account),
+        "can_run_internal": can_run_internal(g.user, account, project), "is_approver": project.is_client_approver(g.user),
+        "me_on_team": project.team_member(g.user),
+        "presenters": sorted({u for t in project.topics for u in t.receiver_users + ([t.sme] if t.sme else [])}
+                             | ({g.user} if g.user.can_contribute(account) else set()), key=lambda u: u.full_name),
+    }
 
 
 def tell_if_ready(project, was_ready):
@@ -199,6 +212,25 @@ def _apply_project(project, data):
     return wanted != set(current)
 
 
+def _seed_project(project, account, it_modules=False):
+    for i, title in enumerate(INTERNAL_CHECKLIST if project.is_internal else DEFAULT_CHECKLIST, start=1):
+        project.checklist.append(ProjectChecklistItem(title=title, position=i))
+    ensure_phases(project)
+    if it_modules:
+        for i, (title, kind) in enumerate(IT_KT_MODULES, start=1):
+            project.modules.append(KTModule(account_id=account.id, title=title, kind=kind, position=i))
+
+
+def quick_project(account, name, workflow):
+    """A new project from the simple Add KT plan form, with the checklist and phases of its track."""
+    position = len(KTProject.query.filter_by(account_id=account.id).all()) + 1
+    project = KTProject(account_id=account.id, position=position, name=name, workflow=workflow, created_at=utcnow())
+    _seed_project(project, account)
+    db.session.add(project)
+    add_project_event(project, g.user, "CREATED")
+    return project
+
+
 @bp.route("/new", methods=["GET", "POST"])
 @login_required
 def new_project(code):
@@ -216,12 +248,7 @@ def new_project(code):
     position = len(KTProject.query.filter_by(account_id=account.id).all()) + 1
     project = KTProject(account_id=account.id, position=position, workflow=data["workflow"], created_at=utcnow())
     _apply_project(project, data)
-    for i, title in enumerate(INTERNAL_CHECKLIST if project.is_internal else DEFAULT_CHECKLIST, start=1):
-        project.checklist.append(ProjectChecklistItem(title=title, position=i))
-    ensure_phases(project)
-    if request.form.get("it_modules") == "1":
-        for i, title in enumerate(IT_KT_MODULES, start=1):
-            project.modules.append(KTModule(account_id=account.id, title=title, position=i))
+    _seed_project(project, account, request.form.get("it_modules") == "1")
     db.session.add(project)
     add_project_event(project, g.user, "CREATED")
     db.session.commit()
@@ -271,11 +298,7 @@ def project(code, project_id):
     state = project_state(project)
     return render_template(
         "projects/project.html", account=account, project=project, state=state, stages=STAGES,
-        can_manage=g.user.can_manage(account), can_contribute=g.user.can_contribute(account),
-        can_run_internal=can_run_internal(g.user, account, project), is_approver=project.is_client_approver(g.user),
-        me_on_team=project.team_member(g.user), doc_types=DOC_TYPES, now=utcnow(),
-        presenters=sorted({u for t in project.topics for u in t.receiver_users + ([t.sme] if t.sme else [])}
-                          | ({g.user} if g.user.can_contribute(account) else set()), key=lambda u: u.full_name),
+        can_manage=g.user.can_manage(account), can_contribute=g.user.can_contribute(account), doc_types=DOC_TYPES,
     )
 
 
@@ -392,8 +415,8 @@ def request_signoff(code, project_id):
                                f"{g.user.full_name} asks you to sign off the knowledge transfer for this project: "
                                "every KT topic has been delivered, confirmed by our receivers and signed off, and "
                                "the hand-over checklist is complete.\n\n"
-                               "If you have a KITE login, open the project and choose 'Sign off'. Otherwise please "
-                               f"reply to {g.user.email} with your approval."))
+                               "If you have a KITE login, open the page below and choose 'Sign off'. Otherwise please "
+                               f"reply to {g.user.email} with your approval.", endpoint="transitions.view"))
     add_project_event(project, g.user, "SIGN_OFF_REQUESTED", project.client_approver_email)
     db.session.commit()
     flash(f"Sign-off request emailed to {project.client_approver_email}.", "success")

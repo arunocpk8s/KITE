@@ -2,14 +2,17 @@
 {% block title %}Onboarding · {{ account.code }} · {{ app_name }}{% endblock %}
 {% block content %}
 <p><a href="{{ url_for('main.account_detail', code=account.code) }}">&larr; {{ account.name }}</a></p>
-<h1>Newcomer onboarding <span class="muted">· {{ account.name }} ({{ account.code }})</span></h1>
+<div class="page-head">
+  <h1>Newcomer onboarding <span class="muted">· {{ account.name }} ({{ account.code }})</span></h1>
+  {% if manager %}<a class="button" href="#add-onboarding">Add onboarding</a>{% endif %}
+</div>
 
 <section class="card">
   <h2>{{ "Newcomers" if author else "My onboarding" }}</h2>
   {% if onboardings %}
   <div class="table-wrap">
   <table>
-    <thead><tr><th>Newcomer</th><th>Learning path</th><th>Buddy</th><th>Progress</th><th>Target</th><th>Status</th></tr></thead>
+    <thead><tr><th>Newcomer</th><th>Learning path</th><th>Buddy</th><th>Progress</th><th>Target</th><th>Status</th>{% if manager %}<th></th>{% endif %}</tr></thead>
     <tbody>
       {% for ob in onboardings %}
       <tr {% if ob.status == 'CANCELLED' %}class="inactive-row"{% endif %}>
@@ -20,6 +23,8 @@
           {% if ob.needs_help %}<span class="overdue">· needs help</span>{% endif %}</td>
         <td {% if ob.is_late(today) %}class="overdue"{% endif %}>{{ ob.target_date | date or "—" }}</td>
         <td><span class="ob-status ob-{{ ob.status }}">{{ {"ACTIVE": "Learning", "READY": "Ready", "CANCELLED": "Cancelled"}[ob.status] }}</span></td>
+        {% if manager %}<td><form class="inline" method="post" action="{{ url_for('onboarding.delete', code=account.code, onboarding_id=ob.id) }}" data-confirm="Delete {{ ob.newcomer.full_name }}'s onboarding and progress? Doubts it raised are kept.">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button type="submit" class="link-button">Delete</button></form></td>{% endif %}
       </tr>
       {% endfor %}
     </tbody>
@@ -40,7 +45,9 @@
     {% for p in paths %}
     <li><a href="{{ url_for('onboarding.path', code=account.code, path_id=p.id) }}"><strong>{{ p.name }}</strong></a>
       {% if p.for_role %}<span class="muted">· for {{ p.for_role }}</span>{% endif %}
-      <span class="muted">· {{ p.items | length }} item{{ "" if p.items | length == 1 else "s" }}{% if p.project %} · {{ p.project.name }}{% endif %}</span></li>
+      <span class="muted">· {{ p.items | length }} item{{ "" if p.items | length == 1 else "s" }}{% if p.project %} · {{ p.project.name }}{% endif %}</span>
+      {% if manager %}<form class="inline" method="post" action="{{ url_for('onboarding.delete_path', code=account.code, path_id=p.id) }}" data-confirm="Delete the learning path '{{ p.name }}'?">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button type="submit" class="link-button">Delete</button></form>{% endif %}</li>
     {% endfor %}
   </ul>
   {% else %}
@@ -48,9 +55,13 @@
   {% endif %}
 </section>
 
-{% if manager and paths %}
-<section class="card narrow-form">
-  <h2>Assign a newcomer</h2>
+{% if manager %}
+<section class="card narrow-form" id="add-onboarding">
+  <h2>Add onboarding</h2>
+  {% if not paths %}
+  <p class="muted">A newcomer follows a learning path. Add a learning path first, then come back here.</p>
+  <p><a class="button" href="{{ url_for('onboarding.new_path', code=account.code) }}">Add learning path</a></p>
+  {% else %}
   <form method="post" action="{{ url_for('onboarding.assign', code=account.code) }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="row">
@@ -69,6 +80,7 @@
     </div>
     <button type="submit">Assign and email them</button>
   </form>
+  {% endif %}
 </section>
 {% endif %}
 {% endblock %}

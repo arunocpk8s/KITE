@@ -152,8 +152,12 @@ def kt_can_move(old, new):
     return new in KT_TRANSITIONS.get(old, ())
 
 
+# KT is planned by technology (Kubernetes, SAP FI) or by process (incident management, month-end close).
+MODULE_KINDS = {"TECHNOLOGY": "Technology", "PROCESS": "Process"}
+
+
 class KTModule(db.Model):
-    """A group of KT topics in a project's KT plan (e.g. 'Billing', 'Month-end close')."""
+    """A technology or process in a project's KT plan, grouping its KT topics."""
 
     __tablename__ = "kt_modules"
 
@@ -162,6 +166,7 @@ class KTModule(db.Model):
     # Nullable only for databases from before projects; upgrade_schema() fills it in.
     project_id = db.Column(db.Integer, db.ForeignKey("kt_projects.id"), index=True)
     title = db.Column(db.String(200), nullable=False)
+    kind = db.Column(db.String(12), nullable=False, default="TECHNOLOGY")
     description = db.Column(db.Text, nullable=False, default="")
     position = db.Column(db.Integer, nullable=False, default=0)
     created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
@@ -169,6 +174,10 @@ class KTModule(db.Model):
     account = db.relationship("Account")
     project = db.relationship("KTProject", back_populates="modules")
     topics = db.relationship("KTTopic", back_populates="module", order_by="(KTTopic.position, KTTopic.id)")
+
+    @property
+    def kind_label(self):
+        return MODULE_KINDS.get(self.kind, self.kind)
 
 
 class KTTopic(db.Model):
@@ -364,13 +373,13 @@ INTERNAL_CHECKLIST = (
 )
 # The KT modules an IT project usually needs; offered when a project is added.
 IT_KT_MODULES = (
-    "Application and business process",
-    "Architecture and environments",
-    "Infrastructure and integrations",
-    "Deployment and release",
-    "Monitoring and incident management",
-    "Security and access",
-    "Support process and SLAs",
+    ("Application and business process", "PROCESS"),
+    ("Architecture and environments", "TECHNOLOGY"),
+    ("Infrastructure and integrations", "TECHNOLOGY"),
+    ("Deployment and release", "TECHNOLOGY"),
+    ("Monitoring and incident management", "PROCESS"),
+    ("Security and access", "TECHNOLOGY"),
+    ("Support process and SLAs", "PROCESS"),
 )
 DOC_TYPES = ("KT deck", "Recording", "Runbook", "SOP", "Process document", "Architecture", "Other")
 
@@ -941,6 +950,84 @@ class DocumentComment(db.Model):
     author = db.relationship("User", foreign_keys=[author_id])
 
 
+class KTAttachment(db.Model):
+    """A file on a KT plan or topic. See attachments.py for what is accepted and how it is served."""
+
+    __tablename__ = "kt_attachments"
+
+    id = db.Column(db.Integer, primary_key=True)
+    account_id = db.Column(db.Integer, db.ForeignKey("accounts.id"), nullable=False, index=True)
+    project_id = db.Column(db.Integer, db.ForeignKey("kt_projects.id"), nullable=False, index=True)
+    topic_id = db.Column(db.Integer, db.ForeignKey("kt_topics.id"), index=True)
+    filename = db.Column(db.String(200), nullable=False)
+    content_type = db.Column(db.String(100), nullable=False)
+    size = db.Column(db.Integer, nullable=False)
+    data = sa.orm.deferred(db.Column(db.LargeBinary, nullable=False))  # read only when the file is opened
+    uploaded_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+
+    project = db.relationship("KTProject", backref=db.backref(
+        "attachments", cascade="all, delete-orphan", order_by="KTAttachment.id"))
+    topic = db.relationship("KTTopic", backref=db.backref("attachments", order_by="KTAttachment.id"))
+
+    @property
+    def is_image(self):
+        return self.content_type.startswith("image/")
+
+    @property
+    def extension(self):
+        return self.filename.rsplit(".", 1)[-1]
+
+    @property
+    def size_label(self):
+        return f"{self.size / 1024 / 1024:.1f} MB" if self.size >= 1024 * 1024 else f"{max(self.size // 1024, 1)} KB"
+
+
+# --- Backlog -------------------------------------------------------------------------------------
+BACKLOG_TYPES = {"TASK": "Task", "KT_GAP": "KT gap", "BUG": "Bug", "IMPROVEMENT": "Improvement", "RISK": "Risk"}
+BACKLOG_PRIORITIES = {"HIGH": "High", "MEDIUM": "Medium", "LOW": "Low"}  # most urgent first
+BACKLOG_STATUSES = {"TODO": "To do", "IN_PROGRESS": "In progress", "DONE": "Done"}
+
+
+class BacklogItem(db.Model):
+    __tablename__ = "backlog_items"
+    __table_args__ = (db.UniqueConstraint("account_id", "number", name="uq_backlog_number"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    account_id = db.Column(db.Integer, db.ForeignKey("accounts.id"), nullable=False, index=True)
+    project_id = db.Column(db.Integer, db.ForeignKey("kt_projects.id"), index=True)
+    number = db.Column(db.Integer, nullable=False)
+    title = db.Column(db.String(200), nullable=False)
+    detail = db.Column(db.Text, nullable=False, default="")
+    item_type = db.Column(db.String(12), nullable=False, default="TASK")
+    priority = db.Column(db.String(8), nullable=False, default="MEDIUM")
+    priority_rank = db.Column(db.Integer, nullable=False, default=1)  # for sorting: 0 is the most urgent
+    status = db.Column(db.String(12), nullable=False, default="TODO", index=True)
+    owner_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    target_date = db.Column(db.Date)
+    created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    done_at = db.Column(db.DateTime)
+
+    account = db.relationship("Account")
+    project = db.relationship("KTProject")
+    owner = db.relationship("User", foreign_keys=[owner_id])
+    created_by = db.relationship("User", foreign_keys=[created_by_id])
+
+    @property
+    def code(self):
+        return f"B-{self.number:03d}"
+
+    @property
+    def type_label(self):
+        return BACKLOG_TYPES.get(self.item_type, self.item_type)
+
+    @property
+    def priority_label(self):
+        return BACKLOG_PRIORITIES.get(self.priority, self.priority)
+
+
 # --- Transactions and change log -----------------------------------------------------------------
 TXN_FREQUENCIES = ("Daily", "Weekly", "Monthly", "Quarterly", "Yearly", "Ad hoc")
 TXN_CRITICALITY = ("High", "Medium", "Low")
@@ -1412,6 +1499,7 @@ ADDED_COLUMNS = [
     ("kt_receivers", "confirm_note", "TEXT NOT NULL DEFAULT ''"),
     ("kt_projects", "workflow", "VARCHAR(20) NOT NULL DEFAULT 'CLIENT_KT'"),
     ("accounts", "ai_transcripts", "BOOLEAN NOT NULL DEFAULT FALSE"),
+    ("kt_modules", "kind", "VARCHAR(12) NOT NULL DEFAULT 'TECHNOLOGY'"),
 ]
 
 

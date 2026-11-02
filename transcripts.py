@@ -60,20 +60,71 @@ def _read_vtt(text):
     return "\n".join(lines)
 
 
-def _read_docx(data):
+def _docx_xml(data):
     try:
         with zipfile.ZipFile(io.BytesIO(data)) as docx:
             if docx.getinfo("word/document.xml").file_size > MAX_DOCX_XML:
                 raise TranscriptError("This Word document is too large to read.")
-            xml = docx.read("word/document.xml").decode("utf-8")
+            return docx.read("word/document.xml").decode("utf-8")
     except (zipfile.BadZipFile, KeyError, UnicodeDecodeError) as err:
         raise TranscriptError("This file is not a readable Word document.") from err
+
+
+def _read_docx(data):
+    xml = _docx_xml(data)
     paragraphs = []
     for paragraph in re.findall(r"<w:p[ >].*?</w:p>", xml, flags=re.S):
         text = "".join(re.findall(r"<w:t(?: [^>]*)?>([^<]*)</w:t>", paragraph))
         if text.strip():
             paragraphs.append(_unescape(text.strip()))
     return "\n".join(paragraphs)
+
+
+def _xml_text(xml):
+    return _unescape(" ".join("".join(re.findall(r"<w:t(?: [^>]*)?>([^<]*)</w:t>", xml)).split()))
+
+
+_PROCESS_AREA = re.compile(r"\b(process|processes|sop|support|slas?|incident|change management|governance|escalation|"
+                           r"onboarding|compliance|release management)\b", re.I)
+_AREA_COLUMN = re.compile(r"technolog|module|area|tool|platform|process|application|system", re.I)
+_TOPIC_COLUMN = re.compile(r"topic|item|title|subject|\bkt\b", re.I)
+
+
+def read_kt_outline(data):
+    """KT topics in a Word plan, as proposals: {area, kind, title}. A heading names the technology or process and the
+    lines under it are its topics; a table may name them in its own columns. Long paragraphs are prose, not topics."""
+    rows, area = [], "General"
+
+    def add(title, where):
+        rows.append({"area": where[:200], "title": title[:200],
+                     "kind": "PROCESS" if _PROCESS_AREA.search(where) else "TECHNOLOGY"})
+
+    for block in re.finditer(r"<w:tbl>.*?</w:tbl>|<w:p[ >].*?</w:p>", _docx_xml(data), flags=re.S):
+        xml = block.group(0)
+        if xml.startswith("<w:tbl>"):
+            cells = [[_xml_text(c) for c in re.findall(r"<w:tc[ >].*?</w:tc>", row, flags=re.S)]
+                     for row in re.findall(r"<w:tr[ >].*?</w:tr>", xml, flags=re.S)]
+            cells = [row for row in cells if any(row)]
+            head = cells[0] if cells else []
+            topic_col = next((i for i, c in enumerate(head) if _TOPIC_COLUMN.search(c)), None)
+            area_col = next((i for i, c in enumerate(head) if i != topic_col and _AREA_COLUMN.search(c)), None)
+            for row in (cells[1:] if topic_col is not None else cells):
+                title = row[topic_col] if topic_col is not None and topic_col < len(row) else next(filter(None, row), "")
+                if area_col is not None and area_col < len(row) and row[area_col]:
+                    area = row[area_col]
+                if title:
+                    add(title, area)
+            continue
+        text = _xml_text(xml)
+        style = re.search(r'<w:pStyle w:val="([^"]+)"', xml)
+        style = style.group(1).lower() if style else ""
+        if not text or style in ("title", "subtitle"):
+            continue
+        if style.startswith("heading"):
+            area = text
+        elif len(text) <= 150 and not (text.endswith(".") and len(text) > 80):
+            add(text, area)
+    return rows
 
 
 def _unescape(text):

@@ -1,0 +1,58 @@
+  <section class="card" id="sign-off">
+    <h2>Client sign-off</h2>
+    {% if project.client_signed %}
+    <p><span class="tick">&#10003;</span> Signed off by <strong>{{ project.client_signer_name }}</strong>{% if project.client_signer_email %} ({{ project.client_signer_email }}){% endif %} on {{ project.client_signed_at | ist }}.</p>
+    <p class="muted">{% if project.client_signed_in_kite %}Signed off in KITE.{% else %}Recorded by {{ project.client_signoff_by.full_name }}.{% endif %}
+      {% if project.client_signoff_evidence %}<a href="{{ project.client_signoff_evidence }}" target="_blank" rel="noopener noreferrer">Evidence</a>{% endif %}</p>
+    {% if project.client_signoff_comment %}<p class="description">{{ project.client_signoff_comment }}</p>{% endif %}
+    {% if can_manage %}
+    <details>
+      <summary>Revoke sign-off</summary>
+      <form method="post" action="{{ url_for('projects.revoke_signoff', code=account.code, project_id=project.id) }}" data-confirm="Revoke the client's sign-off? The KT plan and checklist become editable again.">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label for="reason">Reason</label>
+        <textarea id="reason" name="reason" rows="2" maxlength="2000" required></textarea>
+        <button type="submit" class="danger">Revoke</button>
+      </form>
+    </details>
+    {% endif %}
+    {% elif not state.ready %}
+    <p class="muted">Sign-off opens when every KT topic is signed off ({{ state.signed_off }}/{{ state.topics }}) and the checklist is complete ({{ state.checklist_done }}/{{ state.checklist_total }}).</p>
+    {% if project.client_approver_name or project.client_approver_email %}<p>Client approver: {{ project.client_approver_name }} {% if project.client_approver_email %}<span class="muted">({{ project.client_approver_email }})</span>{% endif %}</p>{% endif %}
+    {% else %}
+    <p>Ready for sign-off. Client approver: <strong>{{ project.client_approver_name or "not set" }}</strong>{% if project.client_approver_email %} <span class="muted">({{ project.client_approver_email }})</span>{% endif %}</p>
+    {% if is_approver %}
+    <form method="post" action="{{ url_for('projects.sign_off', code=account.code, project_id=project.id) }}" data-confirm="Sign off the knowledge transfer for {{ project.name }}?">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label for="comment">Comment (optional)</label>
+      <textarea id="comment" name="comment" rows="2" maxlength="2000"></textarea>
+      <button type="submit">I sign off the KT for this project</button>
+    </form>
+    {% endif %}
+    {% if can_manage %}
+    {% if project.client_approver_email %}
+    <form method="post" action="{{ url_for('projects.request_signoff', code=account.code, project_id=project.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="small">Email the approver to request sign-off</button>
+    </form>
+    {% else %}
+    <p class="hint"><a href="{{ url_for('projects.edit_project', code=account.code, project_id=project.id) }}">Add the client approver's email</a> to request sign-off by email.</p>
+    {% endif %}
+    <details {% if not is_approver %}open{% endif %}>
+      <summary>Record the client's sign-off</summary>
+      <form method="post" action="{{ url_for('projects.sign_off', code=account.code, project_id=project.id) }}" novalidate>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="row">
+          <div><label for="signer_name">Client signer</label><input id="signer_name" name="signer_name" maxlength="120" value="{{ project.client_approver_name }}" required></div>
+          <div><label for="signer_email">Signer email</label><input id="signer_email" name="signer_email" type="email" maxlength="200" value="{{ project.client_approver_email }}"></div>
+        </div>
+        <label for="evidence_link">Evidence link</label>
+        <input id="evidence_link" name="evidence_link" maxlength="500" placeholder="https://...sharepoint.com/... (sign-off email or signed document)" required>
+        <label for="rec-comment">Comment (optional)</label>
+        <textarea id="rec-comment" name="comment" rows="2" maxlength="2000"></textarea>
+        <button type="submit">Record client sign-off</button>
+      </form>
+    </details>
+    {% endif %}
+    {% endif %}
+  </section>

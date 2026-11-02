@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}{{ heading }} · {{ account.code }} · {{ app_name }}{% endblock %}
+{% block content %}
+<p><a href="{{ back }}">&larr; {{ back_label }}</a></p>
+<section class="card narrow-form">
+  <h2>{{ heading }}</h2>
+  <p class="hint">KITE reads the meeting's transcript and proposes {{ what }}. You check them before anything is created. KITE reads the transcript text, not the video itself: in Teams or Zoom, download the transcript as .vtt or .docx.</p>
+  {% if not projects %}
+  <p class="muted">Add a KT plan first; a transcript belongs to one.</p>
+  <p><a class="button" href="{{ url_for('kt.new_topic', code=account.code) }}">Add KT plan</a></p>
+  {% else %}
+  <form method="post" enctype="multipart/form-data" action="{{ url_for('meetings_from.from_recording', code=account.code, focus=focus) }}" novalidate>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label for="project_id">KT plan</label>
+    <select id="project_id" name="project_id" required>
+      {% for p in projects %}<option value="{{ p.id }}" {% if form.project_id == p.id|string %}selected{% endif %}>{{ p.name }}</option>{% endfor %}
+    </select>
+    {% if errors.project_id %}<p class="error">{{ errors.project_id }}</p>{% endif %}
+    {% if saved %}
+    <label for="transcript_id">Use a transcript already in KITE</label>
+    <select id="transcript_id" name="transcript_id">
+      <option value="">No, a new one</option>
+      {% for t in saved %}<option value="{{ t.id }}" {% if form.transcript_id == t.id|string %}selected{% endif %}>{{ t.project.name }} · {{ t.title }}</option>{% endfor %}
+    </select>
+    {% if errors.transcript_id %}<p class="error">{{ errors.transcript_id }}</p>{% endif %}
+    {% endif %}
+    <label for="title">Meeting</label>
+    <input id="title" name="title" value="{{ form.title }}" maxlength="200" placeholder="e.g. Kubernetes upgrades KT, session 2">
+    {% if errors.title %}<p class="error">{{ errors.title }}</p>{% endif %}
+    <div class="row">
+      <div><label for="meeting_date">Date</label><input id="meeting_date" name="meeting_date" type="date" value="{{ form.meeting_date }}">
+        {% if errors.meeting_date %}<p class="error">{{ errors.meeting_date }}</p>{% endif %}</div>
+      <div><label for="recording_link">Recording link</label><input id="recording_link" name="recording_link" value="{{ form.recording_link }}" maxlength="500" placeholder="https://...">
+        {% if errors.recording_link %}<p class="error">{{ errors.recording_link }}</p>{% endif %}</div>
+    </div>
+    <label for="file">Transcript file</label>
+    <input id="file" name="file" type="file" accept=".vtt,.docx,.txt,.md">
+    <label for="pasted">Or paste the text</label>
+    <textarea id="pasted" name="pasted" rows="5">{{ form.pasted }}</textarea>
+    {% if errors.file %}<p class="error">{{ errors.file }}</p>{% endif %}
+    <fieldset class="checklist">
+      <legend>How to read it</legend>
+      {% if ai_available %}
+      <label class="inline"><input type="radio" name="method" value="AI" {% if form.method != 'RULES' %}checked{% endif %}> Claude AI: much better on natural speech; the transcript is sent to Anthropic</label>
+      <label class="inline"><input type="radio" name="method" value="RULES" {% if form.method == 'RULES' %}checked{% endif %}> KITE rules: nothing leaves KITE, but it only finds what is said plainly</label>
+      {% else %}
+      <label class="inline"><input type="radio" name="method" value="RULES" checked> KITE rules: nothing leaves KITE, but it only finds what is said plainly</label>
+      <p class="hint">{% if ai_consented %}Claude AI is allowed for this account, but no API key is set on the server.{% else %}Claude AI is off for this account. An admin can allow it on the client account page if the contract permits.{% endif %}</p>
+      {% endif %}
+      {% if errors.method %}<p class="error">{{ errors.method }}</p>{% endif %}
+    </fieldset>
+    <button type="submit">Read the transcript</button>
+  </form>
+  {% endif %}
+</section>
+{% endblock %}

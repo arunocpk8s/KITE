@@ -8,7 +8,7 @@ from datetime import timedelta
 from flask import url_for
 
 from models import (
-    Change, DocumentComment, DocumentVersion, KTDocument, KTEvent, KTProject, KTTopic, ProjectEvent, Question,
+    BacklogItem, Change, DocumentComment, DocumentVersion, KTDocument, KTEvent, KTProject, KTTopic, ProjectEvent, Question,
     QuestionReply, Sop, SopEvent,
 )
 from timeutil import format_date, ist_local_to_utc, ist_today, to_ist, utcnow
@@ -117,6 +117,11 @@ def _change(c):
                  url_for("transactions.change", code=c.account.code, change_id=c.id), c.account)
 
 
+def _backlog(i):
+    return _item(i.created_at, i.created_by, "added to the backlog", f"{i.code} {i.title}",
+                 url_for("backlog.board", code=i.account.code), i.account)
+
+
 def _sources(ids):
     """(query, its time column, row -> feed item) for everything shown in the feed. Drafts of changes are left out."""
     return [
@@ -128,6 +133,7 @@ def _sources(ids):
         (Question.query.filter(Question.account_id.in_(ids)), Question.created_at, _question),
         (QuestionReply.query.join(Question).filter(Question.account_id.in_(ids)), QuestionReply.created_at, _reply),
         (Change.query.filter(Change.account_id.in_(ids), Change.status == "PUBLISHED"), Change.published_at, _change),
+        (BacklogItem.query.filter(BacklogItem.account_id.in_(ids)), BacklogItem.created_at, _backlog),
     ]
 
 

@@ -15,6 +15,7 @@ import notify
 from auth import login_required
 from kt import URL_RE, members_of, visible_account_or_404
 from models import (
+    add_admin_event,
     PATH_ITEM_KINDS, PROGRESS_STATUSES, KTProject, KTTopic, LearningPath, Onboarding, OnboardingProgress, PathItem,
     Question, Sop, Transaction, db,
 )
@@ -372,6 +373,35 @@ def cancel(code, onboarding_id):
         db.session.commit()
         flash("Onboarding cancelled.", "success")
     return redirect(url_for("onboarding.view", code=account.code, onboarding_id=ob.id))
+
+
+@bp.route("/<int:onboarding_id>/delete", methods=["POST"])
+@login_required
+def delete(code, onboarding_id):
+    account = visible_account_or_404(code)
+    _require(g.user.can_manage(account))
+    ob = _onboarding_or_404(account, onboarding_id)
+    add_admin_event(g.user, "ONBOARDING_DELETED", f"{account.code}: {ob.newcomer.full_name}", ob.path.name)
+    db.session.delete(ob)
+    db.session.commit()
+    flash("Onboarding deleted. Doubts it raised are kept.", "success")
+    return redirect(url_for("onboarding.index", code=account.code))
+
+
+@bp.route("/paths/<int:path_id>/delete", methods=["POST"])
+@login_required
+def delete_path(code, path_id):
+    account = visible_account_or_404(code)
+    _require(g.user.can_manage(account))
+    path = _path_or_404(account, path_id)
+    if path.onboardings:
+        flash(f"{len(path.onboardings)} newcomer(s) still follow '{path.name}'. Delete their onboarding first.", "error")
+    else:
+        add_admin_event(g.user, "LEARNING_PATH_DELETED", account.code, path.name)
+        db.session.delete(path)
+        db.session.commit()
+        flash(f"Learning path '{path.name}' deleted.", "success")
+    return redirect(url_for("onboarding.index", code=account.code))
 
 
 def my_onboarding(user):

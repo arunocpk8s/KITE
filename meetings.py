@@ -13,7 +13,7 @@ import re
 from io import BytesIO
 
 import requests
-from flask import Blueprint, abort, current_app, flash, g, redirect, render_template, request, send_file, url_for
+from flask import Blueprint, Response, abort, current_app, flash, g, redirect, render_template, request, send_file, url_for
 from markupsafe import escape
 from sqlalchemy import func
 
@@ -29,11 +29,20 @@ from models import (
 from timeutil import format_date, parse_date, utcnow
 
 bp = Blueprint("meetings", __name__, url_prefix="/accounts/<code>/projects/<int:project_id>/meetings")
+from_bp = Blueprint("meetings_from", __name__, url_prefix="/accounts/<code>")
 
 MAX_TRANSCRIPT = 2_000_000
 GRAPH = "https://graph.microsoft.com/v1.0"
 GRAPH_SCOPE = ["https://graph.microsoft.com/.default"]
 DOCUMENT_TYPES = {"SOP": "SOP", "RUNBOOK": "Runbook", "NOTES": "Process document"}
+# What the SOP and scope of work pages ask a transcript for.
+FOCUS = {
+    "sop": {"kinds": ("SOP",), "heading": "Create SOPs from a recording's transcript", "what": "draft SOPs",
+            "back": ("sops.sop_list", "SOPs")},
+    "scope": {"kinds": ("IN_SCOPE", "OUT_OF_SCOPE", "SLA", "RESPONSIBILITY"),
+              "heading": "Create scope of work from a recording's transcript", "what": "scope of work, SLAs and RACI",
+              "back": ("sops.scope", "Scope of work")},
+}
 WORD_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
 
@@ -133,11 +142,44 @@ def review(code, project_id, transcript_id):
     _require(g.user.can_contribute(account))
     project = _project_or_404(account, project_id)
     transcript = _transcript_or_404(project, transcript_id)
+    focus = FOCUS.get(request.args.get("focus"))
     return render_template(
         "meetings/review.html", account=account, project=project, transcript=transcript,
+        kinds=focus["kinds"] if focus else None,
         can_manage=g.user.can_manage(account), snow=servicenow.connection_for(account), document_kinds=DOCUMENT_TYPES,
         sharepoint_ready=_sharepoint_on() and bool(project.sharepoint_url), sharepoint_on=_sharepoint_on(),
     )
+
+
+@bp.route("/<int:transcript_id>/transcript")
+@login_required
+def transcript_view(code, project_id, transcript_id):
+    account = visible_account_or_404(code)
+    _require(g.user.can_contribute(account))
+    project = _project_or_404(account, project_id)
+    transcript = _transcript_or_404(project, transcript_id)
+    if request.args.get("download"):
+        return Response(transcript.text, mimetype="text/plain",
+                        headers={"Content-Disposition": f'attachment; filename="transcript-{transcript.id}.txt"'})
+    return render_template("meetings/transcript.html", account=account, project=project, transcript=transcript)
+
+
+@bp.route("/<int:transcript_id>/recording", methods=["POST"])
+@login_required
+def set_recording(code, project_id, transcript_id):
+    account = visible_account_or_404(code)
+    _require(g.user.can_manage(account))
+    project = _project_or_404(account, project_id)
+    transcript = _transcript_or_404(project, transcript_id)
+    link = request.form.get("recording_link", "").strip()
+    if link and (not URL_RE.match(link) or len(link) > 500):
+        flash("The recording link must start with https://.", "error")
+    else:
+        transcript.recording_link = link
+        add_project_event(project, g.user, "UPDATED", f"Recording link of {transcript.title} changed")
+        db.session.commit()
+        flash("Recording link saved.", "success")
+    return redirect(url_for(".review", code=code, project_id=project.id, transcript_id=transcript.id))
 
 
 @bp.route("/<int:transcript_id>/items/<int:item_id>/document.docx")
@@ -213,6 +255,91 @@ def _register_recording(project, transcript):
     if link and not any(d.url == link for d in project.documents):
         db.session.add(ProjectDocument(project=project, title=f"Recording: {_meeting_label(transcript)}"[:200], url=link,
                                        doc_type="Recording", added_by_id=g.user.id, added_at=utcnow()))
+
+
+# --- from the SOP and scope of work pages -----------------------------------------------------------
+def _focused(items, focus):
+    """Only what this page asks for. On the SOP page a runbook is an SOP too."""
+    if focus == "sop":
+        items = [{**item, "kind": "SOP"} if item["kind"] == "RUNBOOK" else item for item in items]
+    return [item for item in items if item["kind"] in FOCUS[focus]["kinds"]]
+
+
+@from_bp.route("/from-recording/<focus>", methods=["GET", "POST"])
+@login_required
+def from_recording(code, focus):
+    account = visible_account_or_404(code)
+    _require(g.user.can_manage(account))
+    if focus not in FOCUS:
+        abort(404)
+    projects = KTProject.query.filter_by(account_id=account.id).order_by(KTProject.position, KTProject.id).all()
+    saved = (MeetingTranscript.query.filter(MeetingTranscript.project_id.in_([p.id for p in projects]))
+             .order_by(MeetingTranscript.id.desc()).limit(50).all())
+    form = {"project_id": "", "transcript_id": "", "title": "", "meeting_date": "", "recording_link": "", "pasted": "",
+            "method": "AI" if ai_available(account) else "RULES"}
+    errors = {}
+    if request.method == "POST":
+        form.update({k: request.form.get(k, "").strip() for k in form})
+        method = form["method"] or "RULES"
+        if method not in ("RULES", "AI") or (method == "AI" and not ai_available(account)):
+            errors["method"] = "Claude AI is not switched on for this account."
+        project = next((p for p in projects if str(p.id) == form["project_id"]), None)
+        transcript, text, meeting_date = None, "", None
+        if form["transcript_id"]:
+            transcript = next((t for t in saved if str(t.id) == form["transcript_id"]), None)
+            if transcript is None:
+                errors["transcript_id"] = "Choose a transcript of this account."
+            else:
+                project, text = transcript.project, transcript.text
+        else:
+            if project is None:
+                errors["project_id"] = "Choose a KT plan of this account."
+            if not form["title"] or len(form["title"]) > 200:
+                errors["title"] = "Name the meeting (up to 200 characters)."
+            meeting_date = parse_date(form["meeting_date"])
+            if form["meeting_date"] and meeting_date is None:
+                errors["meeting_date"] = "Use a valid date."
+            if form["recording_link"] and (not URL_RE.match(form["recording_link"]) or len(form["recording_link"]) > 500):
+                errors["recording_link"] = "The recording link must start with https://."
+            upload = request.files.get("file")
+            try:
+                if upload and upload.filename:
+                    data = upload.read(MAX_TRANSCRIPT + 1)
+                    if len(data) > MAX_TRANSCRIPT:
+                        raise transcripts.TranscriptError("The transcript is too large (2 MB at most). Split it first.")
+                    text = transcripts.read_file(upload.filename, data)
+                else:
+                    text = form["pasted"]
+            except transcripts.TranscriptError as err:
+                errors["file"] = str(err)
+            if not errors.get("file") and not text:
+                errors["file"] = "Upload the transcript or paste its text."
+        if not errors:
+            try:
+                items = _focused(transcripts.extract_with_ai(text, current_app.config["ANTHROPIC_API_KEY"]) if method == "AI"
+                                 else transcripts.extract_with_rules(text), focus)
+            except transcripts.TranscriptError as err:
+                errors["file"] = str(err)
+        if not errors:
+            if transcript is None:
+                transcript = MeetingTranscript(project=project, title=form["title"], meeting_date=meeting_date,
+                                               recording_link=form["recording_link"], text=text, method=method,
+                                               uploaded_by_id=g.user.id, created_at=utcnow())
+                db.session.add(transcript)
+                add_project_event(project, g.user, "TRANSCRIPT_ADDED", f"{form['title']}: {len(items)} items proposed")
+            known = {(i.kind, i.title.lower()) for i in transcript.items}
+            fresh = [item for item in items if (item["kind"], item["title"].lower()) not in known]
+            transcript.items.extend(TranscriptItem(**item) for item in fresh)
+            db.session.commit()
+            flash(f"{len(fresh)} new item{'' if len(fresh) == 1 else 's'} proposed. Check, then create what you want.",
+                  "success" if fresh else "info")
+            return redirect(url_for("meetings.review", code=code, project_id=project.id, transcript_id=transcript.id,
+                                    focus=focus))
+    spec = FOCUS[focus]
+    return render_template("meetings/from_recording.html", account=account, projects=projects, saved=saved, form=form,
+                           errors=errors, focus=focus, heading=spec["heading"], what=spec["what"],
+                           back=url_for(spec["back"][0], code=code), back_label=spec["back"][1],
+                           ai_available=ai_available(account), ai_consented=account.ai_transcripts), 400 if errors else 200
 
 
 # --- creating each kind --------------------------------------------------------------------------

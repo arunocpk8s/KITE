@@ -1,4 +1,4 @@
-"""KT tracker: an account's KT plan (projects -> modules -> topics), sessions, ratings, receiver
+"""KT tracker: an account's KT plan (projects -> technologies and processes -> topics), sessions, ratings, receiver
 confirmation, status workflow and history.
 
 Who may do what (all checked on the server):
@@ -16,12 +16,13 @@ import re
 
 from flask import Blueprint, Response, abort, flash, g, redirect, render_template, request, url_for
 from sqlalchemy import func
+from werkzeug.datastructures import MultiDict
 
 import notify
 from auth import login_required
 from models import (
-    KT_CLOSED, KT_LEAD_ONLY, KT_STATUS_LABELS, KT_STATUSES, KT_TRANSITIONS, LOW_RATING, Account, KTAttendance,
-    KTModule, KTProject, KTRating, KTReceiver, KTSession, KTTopic, User, add_kt_event, db, kt_can_move,
+    KT_CLOSED, KT_LEAD_ONLY, KT_STATUS_LABELS, KT_STATUSES, KT_TRANSITIONS, LOW_RATING, MODULE_KINDS, WORKFLOWS,
+    DEFAULT_WORKFLOW, Account, KTAttendance, KTModule, KTProject, KTRating, KTReceiver, KTSession, KTTopic, User, add_kt_event, db, kt_can_move,
 )
 from timeutil import format_date, format_ist, ist_local_to_utc, ist_today, parse_date, utcnow
 
@@ -132,6 +133,7 @@ def plan(code):
     status = request.args.get("status", "").upper()
     who = request.args.get("who", "")
     project_id = request.args.get("project", "")
+    area = request.args.get("area", "").upper()
     projects = _projects(account)
     shown = [p for p in projects if not project_id or str(p.id) == project_id]
     today = ist_today()
@@ -147,12 +149,22 @@ def plan(code):
             return False
         return True
 
-    sections = [(p, [(m, [t for t in m.topics if keep(t)], _module_progress(m)) for m in p.modules])
-                for p in shown]
+    def groups(project):
+        """Technology first, then process; only the kinds that have something to show."""
+        found = [(label, [(m, [t for t in m.topics if keep(t)], _module_progress(m))
+                          for m in project.modules if m.kind == kind])
+                 for kind, label in MODULE_KINDS.items() if area not in MODULE_KINDS or area == kind]
+        return [(label, modules) for label, modules in found if modules]
+
+    def moves(topic):
+        # Cancelling asks for a reason, so it stays on the topic's own page.
+        return [s for s in allowed_moves(g.user, account, topic) if s != "CANCELLED"]
+
+    sections = [(p, groups(p)) for p in shown]
     return render_template(
         "kt/plan.html", account=account, sections=sections, stats=plan_stats(account, today), today=today,
-        filters={"status": status, "who": who, "project": project_id}, statuses=KT_STATUSES,
-        labels=KT_STATUS_LABELS, can_manage=g.user.can_manage(account), projects=projects,
+        filters={"status": status, "who": who, "project": project_id, "area": area}, statuses=KT_STATUSES,
+        labels=KT_STATUS_LABELS, can_manage=g.user.can_manage(account), projects=projects, kinds=MODULE_KINDS, moves=moves,
     )
 
 
@@ -163,14 +175,14 @@ def export(code):
     today = ist_today()
     out = io.StringIO()
     writer = csv.writer(out)
-    writer.writerow(["Project", "Module", "Topic", "Status", "SME", "Receivers", "Receivers confirmed",
+    writer.writerow(["Project", "Type", "Technology or process", "Topic", "Status", "SME", "Receivers", "Receivers confirmed",
                      "Planned date", "Target sign-off", "Overdue", "Sessions held", "Average understanding",
                      "Signed off"])
     for p in _projects(account):
         for m in p.modules:
             for t in m.topics:
                 writer.writerow([
-                    p.name, m.title, t.title, t.status_label, t.sme.full_name if t.sme else "",
+                    p.name, m.kind_label, m.title, t.title, t.status_label, t.sme.full_name if t.sme else "",
                     "; ".join(u.full_name for u in t.receiver_users),
                     f"{len(t.receivers) - len(t.unconfirmed_receivers)}/{len(t.receivers)}",
                     format_date(t.planned_date), format_date(t.due_date), "yes" if t.is_overdue(today) else "",
@@ -191,13 +203,15 @@ def _projects(account):
 
 def _read_module(form):
     return {"title": " ".join(form.get("title", "").split()), "description": form.get("description", "").strip(),
-            "project_id": form.get("project_id", "")}
+            "project_id": form.get("project_id", ""), "kind": form.get("kind", "TECHNOLOGY")}
 
 
 def _validate_module(account, data, module=None):
     errors = {}
     if not data["title"] or len(data["title"]) > 200:
-        errors["title"] = "Enter a module title (up to 200 characters)."
+        errors["title"] = "Name the technology or process (up to 200 characters)."
+    if data["kind"] not in MODULE_KINDS:
+        errors["kind"] = "Choose Technology or Process."
     if len(data["description"]) > 4000:
         errors["description"] = "At most 4,000 characters."
     project = db.session.get(KTProject, int(data["project_id"])) if data["project_id"].isdigit() else None
@@ -211,7 +225,7 @@ def _validate_module(account, data, module=None):
 
 def _render_module_form(account, module, data, errors):
     return render_template("kt/module_form.html", account=account, module=module, form=data, errors=errors,
-                           projects=_projects(account)), (400 if errors else 200)
+                           projects=_projects(account), kinds=MODULE_KINDS), (400 if errors else 200)
 
 
 @bp.route("/modules/new", methods=["GET", "POST"])
@@ -223,16 +237,16 @@ def new_module(code):
         flash("Add a project first; KT modules belong to a project.", "info")
         return redirect(url_for("projects.new_project", code=account.code))
     data = _read_module(request.form) if request.method == "POST" else \
-        {"title": "", "description": "", "project_id": request.args.get("project", "")}
+        {"title": "", "description": "", "project_id": request.args.get("project", ""), "kind": "TECHNOLOGY"}
     errors = _validate_module(account, data) if request.method == "POST" else {}
     if request.method == "GET" or errors:
         return _render_module_form(account, None, data, errors)
     position = (db.session.query(func.max(KTModule.position)).filter_by(account_id=account.id).scalar() or 0) + 1
-    module = KTModule(account_id=account.id, position=position, title=data["title"],
+    module = KTModule(account_id=account.id, position=position, title=data["title"], kind=data["kind"],
                       description=data["description"], project_id=int(data["project_id"]))
     db.session.add(module)
     db.session.commit()
-    flash(f"Module '{module.title}' added. Add its topics next.", "success")
+    flash(f"{module.kind_label} '{module.title}' added. Add its topics next.", "success")
     return redirect(url_for("kt.plan", code=account.code) + f"#module-{module.id}")
 
 
@@ -243,14 +257,15 @@ def edit_module(code, module_id):
     _require_manager(account)
     module = _module_or_404(account, module_id)
     data = _read_module(request.form) if request.method == "POST" else \
-        {"title": module.title, "description": module.description, "project_id": str(module.project_id or "")}
+        {"title": module.title, "description": module.description, "project_id": str(module.project_id or ""),
+         "kind": module.kind}
     errors = _validate_module(account, data, module) if request.method == "POST" else {}
     if request.method == "GET" or errors:
         return _render_module_form(account, module, data, errors)
-    module.title, module.description = data["title"], data["description"]
+    module.title, module.description, module.kind = data["title"], data["description"], data["kind"]
     module.project_id = int(data["project_id"])
     db.session.commit()
-    flash("Module saved.", "success")
+    flash("Saved.", "success")
     return redirect(url_for("kt.plan", code=account.code) + f"#module-{module.id}")
 
 
@@ -261,16 +276,32 @@ def delete_module(code, module_id):
     _require_manager(account)
     module = _module_or_404(account, module_id)
     if module.topics:
-        flash("Only an empty module can be deleted. Move or cancel its topics first.", "error")
+        flash("Only an empty technology or process can be deleted. Move or cancel its topics first.", "error")
     else:
         db.session.delete(module)
         db.session.commit()
-        flash(f"Module '{module.title}' deleted.", "success")
+        flash(f"'{module.title}' deleted.", "success")
     return redirect(url_for("kt.plan", code=account.code))
 
 
 # --- topics --------------------------------------------------------------------------------------
 TOPIC_FIELDS = ("title", "description", "module_id", "sme_id", "planned_date", "due_date", "materials")
+# The starting statuses a new topic may have: the moves a planned topic could make without a reason.
+INITIAL_STATUSES = ("PLANNED", "SCHEDULED", "ON_HOLD")
+
+
+def find_or_create_module(account, project, kind, title):
+    """The project's technology or process of this name, whatever its case; added if it is new."""
+    for module in project.modules:
+        if module.kind == kind and module.title.lower() == title.lower():
+            return module
+    module = KTModule(account_id=account.id, title=title, kind=kind, position=len(project.modules) + 1)
+    project.modules.append(module)
+    return module
+
+
+def new_topic_position(module):
+    return len(module.topics) + 1
 
 
 def _read_topic(form):
@@ -283,7 +314,36 @@ def _read_topic(form):
         "due_date": form.get("due_date", "").strip(),
         "materials": "\n".join(line.strip() for line in form.get("materials", "").splitlines() if line.strip()),
         "receiver_ids": sorted({int(v) for v in form.getlist("receivers") if v.isdigit()}),
+        "kt_project_id": form.get("kt_project_id", ""),
+        "new_plan": " ".join(form.get("new_plan", "").split()),
+        "new_workflow": form.get("new_workflow", DEFAULT_WORKFLOW),
+        "area_kind": form.get("area_kind", "TECHNOLOGY"),
+        "area_name": " ".join(form.get("area_name", "").split()),
+        "initial_status": form.get("initial_status", "PLANNED"),
     }
+
+
+def _validate_area(account, data):
+    """The add form: which KT plan, and which technology or process in it."""
+    errors = {}
+    if data["new_plan"]:
+        if len(data["new_plan"]) > 200:
+            errors["new_plan"] = "At most 200 characters."
+        if data["new_workflow"] not in WORKFLOWS:
+            errors["new_plan"] = "Choose a track."
+    else:
+        project = db.session.get(KTProject, int(data["kt_project_id"])) if data["kt_project_id"].isdigit() else None
+        if project is None or project.account_id != account.id:
+            errors["kt_project_id" if _projects(account) else "new_plan"] = "Choose a KT plan, or name a new one."
+        elif project.client_signed:
+            errors["kt_project_id"] = SIGNED_PROJECT
+    if data["area_kind"] not in MODULE_KINDS:
+        errors["area_kind"] = "Choose Technology or Process."
+    if not data["area_name"] or len(data["area_name"]) > 200:
+        errors["area_name"] = "Name the technology or process (up to 200 characters)."
+    if data["initial_status"] not in INITIAL_STATUSES:
+        errors["initial_status"] = "Choose a starting status."
+    return errors
 
 
 def _validate_topic(account, data, topic=None):
@@ -293,8 +353,10 @@ def _validate_topic(account, data, topic=None):
     if len(data["description"]) > 8000:
         errors["description"] = "At most 8,000 characters."
     module = db.session.get(KTModule, int(data["module_id"])) if data["module_id"].isdigit() else None
-    if module is None or module.account_id != account.id:
-        errors["module_id"] = "Choose a module."
+    if topic is None and not data["module_id"]:
+        errors.update(_validate_area(account, data))
+    elif module is None or module.account_id != account.id:
+        errors["module_id"] = "Choose a technology or process."
     elif (topic is None or topic.module_id != module.id) and (
             module.project.client_signed or (topic is not None and topic.module.project.client_signed)):
         errors["module_id"] = SIGNED_PROJECT
@@ -325,6 +387,9 @@ def _render_topic_form(account, topic, data, errors, status=200):
         modules=KTModule.query.filter_by(account_id=account.id).order_by(KTModule.position, KTModule.id).all(),
         smes=[u for u in members if u.role in ("sme", "kt_lead", "admin")],
         receivers=[u for u in members if u.role != "viewer"],
+        projects=_projects(account), kinds=MODULE_KINDS, workflows=WORKFLOWS, initial_statuses=INITIAL_STATUSES,
+        labels=KT_STATUS_LABELS,
+        area_names=sorted({m.title for m in KTModule.query.filter_by(account_id=account.id)}),
     ), status
 
 
@@ -364,22 +429,30 @@ def new_topic(code):
     account = visible_account_or_404(code)
     _require_manager(account)
     if request.method == "GET":
-        if not KTModule.query.filter_by(account_id=account.id).first():
-            flash("Add a module first; topics belong to a module.", "info")
-            return redirect(url_for("kt.new_module", code=account.code))
-        data = {f: "" for f in TOPIC_FIELDS}
-        data.update(module_id=request.args.get("module", ""), receiver_ids=[])
+        data = _read_topic(MultiDict())
+        data["kt_project_id"] = request.args.get("project", "")
+        module = db.session.get(KTModule, int(request.args["module"])) if request.args.get("module", "").isdigit() else None
+        if module is not None and module.account_id == account.id:
+            data.update(kt_project_id=str(module.project_id), area_kind=module.kind, area_name=module.title)
         return _render_topic_form(account, None, data, {})
     data = _read_topic(request.form)
     errors = _validate_topic(account, data)
     if errors:
         return _render_topic_form(account, None, data, errors, 400)
-    module = db.session.get(KTModule, int(data["module_id"]))
-    topic = KTTopic(account_id=account.id, status="PLANNED", position=len(module.topics) + 1,
+    if data["module_id"]:
+        module = db.session.get(KTModule, int(data["module_id"]))
+    else:
+        from projects import quick_project  # projects imports this module
+        project = quick_project(account, data["new_plan"], data["new_workflow"]) if data["new_plan"] \
+            else db.session.get(KTProject, int(data["kt_project_id"]))
+        module = find_or_create_module(account, project, data["area_kind"], data["area_name"])
+        db.session.flush()
+        data["module_id"] = str(module.id)
+    topic = KTTopic(account_id=account.id, status=data["initial_status"], position=new_topic_position(module),
                     created_at=utcnow(), updated_at=utcnow())
     _apply_topic(topic, data)
     db.session.add(topic)
-    add_kt_event(topic, g.user, "CREATED", new_value="PLANNED")
+    add_kt_event(topic, g.user, "CREATED", new_value=topic.status)
     db.session.commit()
     if topic.sme and topic.sme_id != g.user.id:
         notify.send([topic.sme.email], f"[{account.code}] KT topic assigned to you: {topic.title}",
@@ -445,7 +518,7 @@ def _topic_body(topic, intro):
         f"{intro}\n\n"
         f"Account: {topic.account.code} - {topic.account.name}\n"
         f"Project: {topic.module.project.name}\n"
-        f"Module:  {topic.module.title}\n"
+        f"{topic.module.kind_label}: {topic.module.title}\n"
         f"Topic:   {topic.title}\n"
         f"SME:     {sme}\n"
         f"Status:  {topic.status_label}\n"
@@ -481,7 +554,8 @@ def change_status(code, topic_id):
         abort(403)
     if topic.module.project.client_signed:
         abort(400, description=SIGNED_PROJECT)
-    back = redirect(url_for("kt.topic", code=account.code, topic_id=topic.id))
+    back = redirect(url_for("kt.plan", code=account.code) if request.form.get("next") == "plan"
+                    else url_for("kt.topic", code=account.code, topic_id=topic.id))
     if new == "CANCELLED" and not comment:
         flash("Give a reason for cancelling the topic.", "error")
         return back

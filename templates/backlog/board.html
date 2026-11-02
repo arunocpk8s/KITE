@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Backlog · {{ account.code }} · {{ app_name }}{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('main.account_detail', code=account.code) }}">&larr; {{ account.name }}</a></p>
+<h1>Backlog <span class="muted">· {{ account.name }} ({{ account.code }})</span></h1>
+<form class="filters" method="get" action="{{ url_for('backlog.board', code=account.code) }}">
+  <label>Project
+    <select name="project" data-autosubmit>
+      <option value="">All projects</option>
+      {% for p in projects %}<option value="{{ p.id }}" {% if project_id == p.id|string %}selected{% endif %}>{{ p.name }}</option>{% endfor %}
+    </select>
+  </label>
+  <button type="submit">Filter</button>
+  {% if can_write %}<a class="button push-right" href="{{ url_for('backlog.new', code=account.code, project_id=project_id) }}">Add backlog item</a>{% endif %}
+</form>
+<div class="board">
+  {% for key, label, items in columns %}
+  <section class="board-column" aria-label="{{ label }}">
+    <h2>{{ label }} <span class="tab-count">{{ items | length }}</span></h2>
+    {% for item in items %}
+    <article class="board-card">
+      <div class="board-card-head"><span class="muted">{{ item.code }} · {{ item.type_label }}</span> <span class="crit crit-{{ item.priority_label }}">{{ item.priority_label }}</span></div>
+      {% if can_write %}<a class="board-title" href="{{ url_for('backlog.edit', code=account.code, item_id=item.id) }}">{{ item.title }}</a>{% else %}<strong>{{ item.title }}</strong>{% endif %}
+      {% if item.detail %}<p class="description">{{ item.detail | truncate(160) }}</p>{% endif %}
+      <p class="muted">{{ item.owner.full_name if item.owner else "No owner" }}{% if item.project %} · {{ item.project.name }}{% endif %}
+        {% if item.target_date %}· <span {% if key != 'DONE' and item.target_date < today %}class="overdue"{% endif %}>{{ item.target_date | date }}</span>{% endif %}</p>
+      {% if can_write %}
+      <form class="board-move" method="post" action="{{ url_for('backlog.move', code=account.code, item_id=item.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <select name="status" data-autosubmit aria-label="Status of {{ item.code }}">
+          {% for s, s_label in statuses.items() %}<option value="{{ s }}" {% if s == key %}selected{% endif %}>{{ s_label }}</option>{% endfor %}
+        </select>
+        <button type="submit" class="small">Move</button>
+      </form>
+      {% endif %}
+    </article>
+    {% else %}
+    <p class="muted">Nothing here.</p>
+    {% endfor %}
+  </section>
+  {% endfor %}
+</div>
+{% endblock %}

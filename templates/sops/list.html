@@ -21,7 +21,8 @@
     </select>
   </label>
   <button type="submit">Filter</button>
-  {% if can_author %}<a class="button push-right" href="{{ url_for('sops.new_sop', code=account.code) }}">Add SOP</a>{% endif %}
+  {% if g.user.can_manage(account) %}<a class="button button-secondary push-right" href="{{ url_for('meetings_from.from_recording', code=account.code, focus='sop') }}">Create from a recording's transcript</a>{% endif %}
+  {% if can_author %}<a class="button {{ '' if g.user.can_manage(account) else 'push-right' }}" href="{{ url_for('sops.new_sop', code=account.code) }}">Add SOP</a>{% endif %}
 </form>
 
 <section class="card">

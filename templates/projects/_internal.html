@@ -1,0 +1,84 @@
+  <section class="card" id="internal">
+    <h2>Internal KT</h2>
+    <p class="muted">After the client's KT, our receivers pass it on to the rest of the team. Each team member confirms when they have completed it.</p>
+    {% if project.team %}
+    <ul class="plain-list">
+      {% for m in project.team | sort(attribute='user.full_name') %}
+      <li>{% if m.completed_at %}<span class="tick">&#10003;</span> <strong>{{ m.user.full_name }}</strong> completed {{ m.completed_at | ist }}{% if m.comment %} · <span class="description">{{ m.comment }}</span>{% endif %}
+        {% else %}<span class="pending">&#9675;</span> {{ m.user.full_name }} <span class="muted">· not completed yet</span>{% endif %}</li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="muted">No internal KT team set.{% if can_manage %} <a href="{{ url_for('projects.edit_project', code=account.code, project_id=project.id) }}">Choose the team</a>.{% endif %}</p>
+    {% endif %}
+
+    <h3>Internal sessions</h3>
+    {% if project.internal_sessions %}
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th>When</th><th>Presenter</th><th>Agenda</th><th>Links</th><th></th></tr></thead>
+      <tbody>
+        {% for s in project.internal_sessions %}
+        <tr>
+          <td>{{ s.starts_at | ist }}<br><span class="muted">{{ s.duration_minutes }} min</span></td>
+          <td>{{ s.presenter.full_name }}</td>
+          <td class="description">{{ s.agenda }}</td>
+          <td>{% if s.meeting_link %}<a href="{{ s.meeting_link }}" target="_blank" rel="noopener noreferrer">Meeting</a>{% endif %}
+            {% if s.recording_link %}{{ " · " if s.meeting_link }}<a href="{{ s.recording_link }}" target="_blank" rel="noopener noreferrer">Recording</a>{% endif %}</td>
+          <td>{% if s.held %}<span class="tick">&#10003;</span> Held
+            {% elif can_run_internal %}
+            <details>
+              <summary>Mark as held</summary>
+              <form method="post" action="{{ url_for('projects.internal_session_held', code=account.code, project_id=project.id, session_id=s.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <label for="irec-{{ s.id }}">Recording link (optional)</label>
+                <input id="irec-{{ s.id }}" name="recording_link" placeholder="https://...">
+                <button type="submit" class="small">Save</button>
+              </form>
+            </details>
+            {% else %}<span class="muted">Not held yet</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+    <p class="muted">No internal sessions yet.</p>
+    {% endif %}
+    {% if can_run_internal %}
+    <details class="add-session">
+      <summary>Schedule an internal session</summary>
+      <form method="post" action="{{ url_for('projects.add_internal_session', code=account.code, project_id=project.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="row">
+          <div class="row">
+            <div><label for="i-date">Date</label><input id="i-date" name="date" type="date" required></div>
+            <div><label for="i-time">Time (IST)</label><input id="i-time" name="time" type="time" required></div>
+          </div>
+          <div class="row">
+            <div><label for="i-duration">Minutes</label><input id="i-duration" name="duration" type="number" min="15" max="480" step="15" value="60"></div>
+            <div><label for="i-presenter">Presenter</label>
+              <select id="i-presenter" name="presenter_id">
+                {% for u in presenters %}<option value="{{ u.id }}" {% if u.id == g.user.id %}selected{% endif %}>{{ u.full_name }}</option>{% endfor %}
+              </select></div>
+          </div>
+        </div>
+        <label for="i-link">Meeting link</label>
+        <input id="i-link" name="meeting_link" placeholder="https://teams.microsoft.com/...">
+        <label for="i-agenda">Agenda (topics covered)</label>
+        <textarea id="i-agenda" name="agenda" rows="2" maxlength="2000"></textarea>
+        <button type="submit">Schedule and email the team</button>
+      </form>
+    </details>
+    {% endif %}
+
+    {% if me_on_team %}
+    <form method="post" action="{{ url_for('projects.complete_internal', code=account.code, project_id=project.id) }}" class="rating-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <p><strong>{{ "You completed internal KT on " ~ (me_on_team.completed_at | ist) ~ "." if me_on_team.completed_at else "Have you completed the internal KT for this project?" }}</strong></p>
+      <label for="i-comment">Comment or open questions (optional)</label>
+      <textarea id="i-comment" name="comment" rows="2" maxlength="2000">{{ me_on_team.comment }}</textarea>
+      <button type="submit">{{ "Update" if me_on_team.completed_at else "I have completed internal KT" }}</button>
+    </form>
+    {% endif %}
+  </section>
